@@ -97,7 +97,7 @@ def get_raw_data():
         return show
 
 
-def reduce_rawdata():
+def reduce_raw_data():
     """缩减原始数据体积，仅保存需要的列"""
     first_init()
     # 缩减customization 定制表体积
@@ -319,8 +319,9 @@ def calculate_cards_value(df):
     df = calculate_lead_cards_value(df)  # 出牌牌值计算
     df = apart_cards_type(df)  # 牌型拆解
     df = rival_leadcards_treatment(df)  # 提取对手出牌，各出牌情况标记，对手剩余牌
-    statistic_procedure(df)  # 统计数据提取
-    read_data_result(os.path.join(tmpdatadir1, 'statistic.txt'))
+
+    statistic_procedure_v2(df)   # 统计数据提取
+
     # 存储拆牌后的数据
     write_data(df, filename='robot_result')
     return df
@@ -333,23 +334,8 @@ def apart_cards_type(df):
     :return: 各牌型数量，剩余手牌中各牌型的最大牌值，
     """
 
-    # 拆分出各牌型的数量
-    # df.loc[:, 'card_type_list'] = df.loc[:, 'cards_type'].apply(
-    #     lambda x: [x.split(sep='-')[0] for x in str(x).split(sep='||')])  # 牌型组成的列表
-    # df.loc[:, 'card_type_list_counter'] = df.loc[:, 'card_type_list'].apply(Counter)  # 计算牌型数量
-    # 将counter 展开为列
-    # df_cardnum = pd.DataFrame(df["card_type_list_counter"].values.tolist())
-    # df = pd.concat([df, df_cardnum], axis=1)
-    # cardtype_namedict = {'1': '单张', '2': '对子', '4': '三张', '64': '顺子', '256': '连对', '512': '钢板', '4096': '炸弹4-5张',
-    #                      '16384': "同花顺", "32768": '超级大炸弹', '四王': '524288', }  # 3带2=='32'
-    # df.rename(columns=cardtype_namedict, inplace=True)
-    # if 'nan' in df.columns:
-    #     # 对于出完牌的情况，Counter返回 nan 的计数，因此删除
-    #     df.drop(columns=['nan'], inplace=True)
-    # df.drop(columns=["card_type_list_counter", 'card_type_list'], inplace=True)  # 删除中间 Counter 结果,牌类型列表
-
     cardoptypelist = [1, 2, 4, 64, 256, 512, 4096, 16384, 32768, 524288]
-    
+
     def apart_card(x):
         """拆分牌组，取各牌型的数量 + 最大牌值"""
         # 1,2,4,64,256,512,4096,16384,32768,524288
@@ -396,23 +382,6 @@ def apart_cards_type(df):
     # 将展开列 合并回原始 df ,并删除拆分列
     df = pd.concat([df, df_apart], axis=1)
     df.drop(columns=['apartcol'], inplace=True)
-
-    # df = pd.concat([df, df.loc[:,'apartcol'].str.split(',', expand=True)], axis=1, names=colnames_optypenumlist)
-
-    # optype_counter = Counter(card_optype_list)
-    # createVar = locals()
-    # for optype in cardoptypelist:
-    #     createVar['optype'+str(optype)+'_nums'] = optype_counter[str(optype)]
-
-    # optype1     = optype_counter["1"]
-    # optype2     = optype_counter["2"]
-    # optype4     = optype_counter["4"]
-    # optype64    = optype_counter["64"]
-    # optype256   = optype_counter["256"]
-    # optype4096  = optype_counter["4096"]
-    # optype16384 = optype_counter["16384"]
-    # optype32768 = optype_counter["32768"]
-    # optype524288= optype_counter["524288"]
 
     # 统计手牌非炸弹牌型平均牌值
     def calculate_mean_cards_value(x):
@@ -489,7 +458,6 @@ def apart_cards_type(df):
     # 判断 剩余的最大炸弹
     df.loc[:, 'leftmaxbomb'] = df.loc[:, 'cards_type'].apply(calculate_maxbomb)
 
-    # write_data(df, tmpdatadir1, filename='robot222')
     return df
 
 
@@ -894,157 +862,154 @@ def rival_leadcards_treatment(df):
     return df
 
 
-def statistic_procedure(df):
-    """提取各情况的统计值"""
-    def get_write_data(label_name, col_name, col_value_list):
-        # 获得统计值的辅助函数
-        df.loc[:, col_name] = df.loc[:, col_name].astype(float)
-        if len(col_value_list) > 1:
-            tmp_df = df.loc[
-                (df.loc[:, col_name] > col_value_list[0]) & (df.loc[:, col_name] < col_value_list[1])]
+def statistic_procedure_v2(df):
+    """提取各情况的统计值第二版，对不同类型情况的分组统计"""
+
+    # 出牌对手剩余手牌数
+    def calculate_rival_leftcards_nums(x):
+        if int(x) < 1:
+            return "0"
+        elif int(x) in [1, 3]:
+            return "1,3"
+        elif int(x) == 2:
+            return "2"
+        elif int(x) == 4:
+            return "4"
         else:
-            tmp_df = df.loc[df.loc[:, col_name] == col_value_list[0]]
-        tmp_df = tmp_df.loc[tmp_df.loc[:, 'need_bomb'] == 1]
-        need_bomb_times = sum(tmp_df.loc[:, 'need_bomb'])
-        label_bomb_times = sum(tmp_df.loc[:, 'label_bomb'])
-        format_str = f'{label_name}, {str(need_bomb_times)}, {str(label_bomb_times)}'
-        return format_str
+            return ">4"
 
-    # current_time = time.strftime('%Y%m%d%H%M%S', time.localtime())
-    filename = 'statistic.txt'
-    with open(os.path.join(tmpdatadir1, filename), 'a') as f:
-        # 出牌对手剩余手牌数
-        f.write(get_write_data('rival_leftcards_numsgt15', 'rival_leftcards_nums', [15, 28]))
-        f.write(os.linesep)
-        f.write(get_write_data('rival_leftcards_numsgt10lt15', 'rival_leftcards_nums', [10, 15]))
-        f.write(os.linesep)
-        f.write(get_write_data('rival_leftcards_numsgt7lt10', 'rival_leftcards_nums', [7, 10]))
-        f.write(os.linesep)
-        f.write(get_write_data('rival_leftcards_numsgt4lt8', 'rival_leftcards_nums', [4, 8]))
-        f.write(os.linesep)
-        f.write(get_write_data('rival_leftcards_numseq4', 'rival_leftcards_nums', [4]))
-        f.write(os.linesep)
-        f.write(get_write_data('rival_leftcards_numseq3', 'rival_leftcards_nums', [3]))
-        f.write(os.linesep)
-        f.write(get_write_data('rival_leftcards_numseq2', 'rival_leftcards_nums', [2]))
-        f.write(os.linesep)
-        f.write(get_write_data('rival_leftcards_numseq1', 'rival_leftcards_nums', [1]))
-        f.write(os.linesep)
-        f.write(get_write_data('rival_leftcards_numseq0', 'rival_leftcards_nums', [0]))
-        f.write(os.linesep)
-        # 出牌对手队友剩余手牌数
-        f.write(get_write_data('rival_leftcards_nums_pairgt15', 'rival_leftcards_nums_pair', [15, 28]))
-        f.write(os.linesep)
-        f.write(get_write_data('rival_leftcards_nums_pairgt10lt15', 'rival_leftcards_nums_pair', [10, 15]))
-        f.write(os.linesep)
-        f.write(get_write_data('rival_leftcards_nums_pairgt7lt10', 'rival_leftcards_nums_pair', [7, 10]))
-        f.write(os.linesep)
-        f.write(get_write_data('rival_leftcards_nums_pairgt4lt8', 'rival_leftcards_nums_pair', [4, 8]))
-        f.write(os.linesep)
-        f.write(get_write_data('rival_leftcards_nums_paireq4', 'rival_leftcards_nums_pair', [4]))
-        f.write(os.linesep)
-        f.write(get_write_data('rival_leftcards_nums_paireq3', 'rival_leftcards_nums_pair', [3]))
-        f.write(os.linesep)
-        f.write(get_write_data('rival_leftcards_nums_paireq2', 'rival_leftcards_nums_pair', [2]))
-        f.write(os.linesep)
-        f.write(get_write_data('rival_leftcards_nums_paireq1', 'rival_leftcards_nums_pair', [1]))
-        f.write(os.linesep)
-        f.write(get_write_data('rival_leftcards_nums_paireq0', 'rival_leftcards_nums_pair', [0]))
-        f.write(os.linesep)
-        # 队友剩余手牌数
-        f.write(get_write_data('leftcards_nums_pairgt15', 'leftcards_nums_pair', [15, 28]))
-        f.write(os.linesep)
-        f.write(get_write_data('leftcards_nums_pairgt10lt15', 'leftcards_nums_pair', [10, 15]))
-        f.write(os.linesep)
-        f.write(get_write_data('leftcards_nums_pairgt7lt10', 'leftcards_nums_pair', [7, 10]))
-        f.write(os.linesep)
-        f.write(get_write_data('leftcards_nums_pairgt4lt8', 'leftcards_nums_pair', [4, 8]))
-        f.write(os.linesep)
-        f.write(get_write_data('leftcards_nums_paireq4', 'leftcards_nums_pair', [4]))
-        f.write(os.linesep)
-        f.write(get_write_data('leftcards_nums_paireq3', 'leftcards_nums_pair', [3]))
-        f.write(os.linesep)
-        f.write(get_write_data('leftcards_nums_paireq2', 'leftcards_nums_pair', [2]))
-        f.write(os.linesep)
-        f.write(get_write_data('leftcards_nums_paireq1', 'leftcards_nums_pair', [1]))
-        f.write(os.linesep)
-        f.write(get_write_data('leftcards_nums_paireq0', 'leftcards_nums_pair', [0]))
-        f.write(os.linesep)
-        # 自己剩余牌信息
-        f.write(get_write_data('leftbomb_numseq1', 'leftbomb_nums', [1]))
-        f.write(os.linesep)
-        f.write(get_write_data('leftbomb_numseq2', 'leftbomb_nums', [2]))
-        f.write(os.linesep)
-        f.write(get_write_data('leftbomb_numseq3', 'leftbomb_nums', [3]))
-        f.write(os.linesep)
-        f.write(get_write_data('leftbomb_numseq4', 'leftbomb_nums', [4]))
-        f.write(os.linesep)
-        f.write(get_write_data('leftbomb_numsgt4', 'leftbomb_nums', [4, 8]))
-        f.write(os.linesep)
-        f.write(get_write_data('leftmaxbombeq2', 'leftmaxbomb', [2]))  # 同花顺及以上
-        f.write(os.linesep)
-        f.write(get_write_data('leftmaxbombeq1', 'leftmaxbomb', [1]))  # 4炸小于10
-        f.write(os.linesep)
-        # 手牌非炸弹手数
-        f.write(get_write_data('Nonebomb_lefthandseq1', 'Nonebomb_lefthands', [1]))
-        f.write(os.linesep)
-        f.write(get_write_data('Nonebomb_lefthandseq2', 'Nonebomb_lefthands', [2]))
-        f.write(os.linesep)
-        f.write(get_write_data('Nonebomb_lefthandseq3', 'Nonebomb_lefthands', [3]))
-        f.write(os.linesep)
-        f.write(get_write_data('Nonebomb_lefthandseq4', 'Nonebomb_lefthands', [4]))
-        f.write(os.linesep)
-        f.write(get_write_data('Nonebomb_lefthandsgt4', 'Nonebomb_lefthands', [4, 20]))  # 手牌非炸手数大于4
-        f.write(os.linesep)
-        # 手牌非炸平均牌值
-        f.write(get_write_data('Nonebomb_lefthandslteq8', 'Nonebomb_lefthands', [0, 8.01]))  # (:,8]
-        f.write(os.linesep)
-        f.write(get_write_data('Nonebomb_lefthandsgt8lteq11', 'Nonebomb_lefthands', [8, 11.01]))  # （8,11]
-        f.write(os.linesep)
-        f.write(get_write_data('Nonebomb_lefthandsgt11', 'Nonebomb_lefthands', [11, 50]))  # (11,:)
-        f.write(os.linesep)
-        # 对手出牌情况
-        f.write(get_write_data('lead_firsthand_bombeq1', 'lead_firsthand_bomb', [1]))  # 开局炸
-        f.write(os.linesep)
-        f.write(get_write_data('lead_bombeq1', 'lead_bomb', [1]))  # 出炸
-        f.write(os.linesep)
-        f.write(get_write_data('lead_max_optype1eq1', 'lead_max_optype1', [1]))  # 最大单张
-        f.write(os.linesep)
-        f.write(get_write_data('lead_max_optype2eq1', 'lead_max_optype2', [1]))  # 最大对子
-        f.write(os.linesep)
-        f.write(get_write_data('lead_max_optype4eq1', 'lead_max_optype4', [1]))  # 最大三张
-        f.write(os.linesep)
-        f.write(get_write_data('lead_max_optype32eq1', 'lead_max_optype32', [1]))  # 最大三带二
-        f.write(os.linesep)
-        f.write(get_write_data('lead_max_optype256eq1', 'lead_max_optype256', [1]))  # 连对
-        f.write(os.linesep)
-        f.write(get_write_data('lead_max_optype512eq1', 'lead_max_optype512', [1]))  # 钢板
-        f.write(os.linesep)
-        f.write(get_write_data('lead_max_optype64eq1', 'lead_max_optype64', [1]))  # 顺子
-        f.write(os.linesep)
-        f.write(get_write_data('optype12432eq1', 'optype12432', [1]))  # 单张、对子、三张、三带二非炸压不住
-        f.write(os.linesep)
-        f.write(get_write_data('optype25651264eq1', 'optype25651264', [1]))  # 连对、钢板、顺子非炸压不住
-        f.write(os.linesep)
+    df.loc[:, "rival_leftcards_nums"] = df.loc[:, 'rival_leftcards_nums'].astype(int)
+    df.loc[:, "rival_leftcards_nums"] = df.loc[:, 'rival_leftcards_nums'].astype(str)
+    df.loc[:, "rival_leftcards_nums"] = df.loc[:, 'rival_leftcards_nums'].apply(calculate_rival_leftcards_nums)
 
+    # 出牌对手队友剩余手牌数
+    def calculate_rival_leftcards_nums_pair(x):
+        if int(x) < 1:
+            return "0"
+        elif int(x) < 5:
+            return "1,2,3,4"
+        elif int(x) < 11:
+            return ">4,<11"
+        elif int(x) < 16:
+            return ">10,<16"
+        else:
+            return ">15"
 
-def read_data_result(filepath):
-    basename = os.path.dirname(filepath)
-    filename = str(os.path.basename(filepath)).split(".")[0]
-    with open(filepath, 'r') as f:
-        data = [line.strip().split(',') for line in f.readlines()]
-    data = pd.DataFrame(data, columns=['situation', 'occurrence_times', 'lead_bomb_times'])  # 情景，出现次数，出炸次数
-    data.dropna(inplace=True)  # 删除换行
-    data.loc[:, 'occurrence_times'] = data.loc[:, 'occurrence_times'].astype(int)
-    data.loc[:, 'lead_bomb_times'] = data.loc[:, 'lead_bomb_times'].astype(int)
-    data = data.groupby(['situation']).agg({
-        'occurrence_times': np.sum,
-        'lead_bomb_times': np.sum,
+    df.loc[:, "rival_leftcards_nums_pair"] = df.loc[:, 'rival_leftcards_nums_pair'].astype(int)
+    df.loc[:, "rival_leftcards_nums_pair"] = df.loc[:, 'rival_leftcards_nums_pair'].astype(str)
+    df.loc[:, "rival_leftcards_nums_pair"] = df.loc[:, 'rival_leftcards_nums_pair'].apply(
+        calculate_rival_leftcards_nums_pair)
+
+    # 队友剩余手牌数
+    def calculate_leftcards_nums_pair(x):
+        if int(x) < 1:
+            return "0"
+        elif int(x) < 4:
+            return "1,2,3"
+        elif int(x) < 16:
+            return ">3,<16"
+        else:
+            return ">15"
+
+    df.loc[:, "leftcards_nums_pair"] = df.loc[:, 'leftcards_nums_pair'].astype(int)
+    df.loc[:, "leftcards_nums_pair"] = df.loc[:, 'leftcards_nums_pair'].astype(str)
+    df.loc[:, "leftcards_nums_pair"] = df.loc[:, 'leftcards_nums_pair'].apply(calculate_leftcards_nums_pair)
+
+    # 自己剩余牌信息
+    def calculate_leftbomb_nums(x):
+        if int(x) == 1:
+            return "1"
+        elif int(x) in [2, 3]:
+            return "2,3"
+        else:
+            return ">3"
+
+    df.loc[:, "leftbomb_nums"] = df.loc[:, 'leftbomb_nums'].astype(int)
+    df.loc[:, "leftbomb_nums"] = df.loc[:, 'leftbomb_nums'].astype(str)
+    df.loc[:, "leftbomb_nums"] = df.loc[:, 'leftbomb_nums'].apply(calculate_leftbomb_nums)
+
+    # 手牌非炸弹手数
+    df.loc[:, "Nonebomb_lefthands"] = df.loc[:, "Nonebomb_lefthands"].astype(int)
+    df.loc[:, "Nonebomb_lefthands"] = df.loc[:, "Nonebomb_lefthands"].astype(str)
+    df.loc[:, "Nonebomb_lefthands"] = df.loc[:, "Nonebomb_lefthands"].apply(lambda x: ">1" if int(x) > 1 else "1")
+
+    # 手牌非炸平均牌值
+    def calculate_onebomb_mean_cardvalue(x):
+        if float(x) < 8.01:
+            return "<=8"
+        elif float(x) < 11.01:
+            return ">8,<=11"
+        else:
+            return ">11"
+
+    df.loc[:, "Nonebomb_MeanCardvalue"] = df.loc[:, 'Nonebomb_MeanCardvalue'].astype(str)
+    df.loc[:, "Nonebomb_MeanCardvalue"] = df.loc[:, 'Nonebomb_MeanCardvalue'].apply(calculate_onebomb_mean_cardvalue)
+
+    # 对手出牌情况
+    def calculate_lead_cards(row):
+        if int(row["lead_bomb"]) == 1:
+            return 1  # 出炸
+        elif int(row["lead_max_optype1"]) == 1:
+            return 2  # "最大单张"
+        elif int(row["lead_max_optype512"]) == 1:
+            return 3  # "钢板"
+        elif int(row["lead_max_optype256"]) == 1 or int(row["lead_max_optype64"]) == 1:
+            return 4  # "连对or顺子"
+        elif int(row["lead_max_optype2"]) == 1 or int(row["lead_max_optype4"]) == 1 or int(
+                row["lead_max_optype32"]) == 1:
+            return 5  # 最大对子，三张，三带二
+        else:
+            return 0  # 其他情况
+
+    df.loc[:, "lead_cards"] = df.apply(lambda row: calculate_lead_cards(row), axis=1)
+
+    # 处理房间号：从startguid中拆分出来
+    def room_sep(x):
+        if x in ["17743", '17744', '8136', '10321', '10163', '18934']:
+            return "经典"
+        elif x in ["19015", '18149', '18148']:
+            return "不洗牌"
+        else:
+            return "积分场"
+
+    df.loc[:, 'startguid'] = df.loc[:, 'startguid'].apply(lambda x: x.split("_")[1])
+    df.loc[:, 'startguid'] = df.loc[:, 'startguid'].apply(room_sep)
+
+    used_cols = ["startguid", 'rival_leftcards_nums', 'rival_leftcards_nums_pair', 'leftcards_nums_pair',
+                 'leftbomb_nums', 'Nonebomb_lefthands', 'lead_cards', 'need_bomb', 'label_bomb']
+    statistic_df = df.loc[
+        (df.loc[:, 'need_bomb'] == 1) & (df.loc[:, 'lead_cards'] > 0), used_cols]
+
+    statistic_df.loc[:, 'need_bomb'] = statistic_df.loc[:, 'need_bomb'].astype(int)
+    statistic_df.loc[:, 'label_bomb'] = statistic_df.loc[:, 'label_bomb'].astype(int)
+    statistic_df = statistic_df.groupby(used_cols[:-2]).agg({
+        'need_bomb': np.sum,
+        'label_bomb': np.sum,
     })
-    data.loc[:, 'probability'] = data.apply(
+    statistic_df.reset_index(drop=False, inplace=True)
+    statistic_df.loc[:, "lead_cards"] = statistic_df.loc[:, 'lead_cards'].astype(str)
+    lead_cards_name_dict = {"1": "出炸", "2": "最大单张", "3": "钢板", "4": "连对或顺子", "5": "最大对子、三张、三带二"}
+    statistic_df.loc[:, "lead_cards"] = statistic_df.loc[:, 'lead_cards'].map(lead_cards_name_dict)
+
+    robot_bomb_statistic_situations = {
+        "Nonebomb_lefthands": "手牌非炸手数",
+        "Nonebomb_MeanCardvalue": "手牌非炸平均牌值",
+        "lead_cards": "对手出牌",
+        "leftbomb_nums": "自己剩余炸弹数",
+        "leftcards_nums_pair": "队友剩余手牌数",
+        "rival_leftcards_nums_pair": "出牌对手队友剩余手牌数",
+        "rival_leftcards_nums": "出牌对手剩余手牌数",
+        "need_bomb": "occurrence_times",
+        "label_bomb": "lead_bomb_times",
+        'startguid': "房间号",
+    }
+    statistic_df.rename(columns=robot_bomb_statistic_situations, inplace=True)
+
+    statistic_df.loc[:, 'probability'] = statistic_df.apply(
         lambda row: round(row["lead_bomb_times"] / row["occurrence_times"], 4) if row["occurrence_times"] != 0 else 0,
         axis=1)
-    write_data(data, basename, filename, index=True)
+
+    write_data(statistic_df, filename='statistic_result',)
 
 
 def main_process(process_test=True, data_sep=10000):
@@ -1070,15 +1035,6 @@ def main_process(process_test=True, data_sep=10000):
 
 
 if __name__ == '__main__':
-    # reduce_rawdata()
-    # main_process(True)  # 测试数据
+    # reduce_raw_data()
+    main_process(True)  # 测试数据
     # main_process(process_test=False, data_sep=3000)
-
-    first_init()
-    allfiles = [file for file in os.listdir(tmpdatadir1) if file.startswith("robot_result")]
-    df = pd.DataFrame()
-    for file in allfiles:
-        tmp_df = pd.read_excel(os.path.join(tmpdatadir1, file))
-        df = df.append(tmp_df, sort=False)
-    statistic_procedure(df)  # 统计数据提取
-    read_data_result(os.path.join(tmpdatadir1, 'statistic.txt'))
