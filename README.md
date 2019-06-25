@@ -46,5 +46,5 @@ basic data feature engineering
 - 9533积分场
 
 ## 中英文名称对照字典
-+ 列名称[https://github.com/firewang/ur.ctwl/blob/master/robot_bomb_colnames.txt]（https://github.com/firewang/ur.ctwl/blob/master/robot_bomb_colnames.txt）
-+ 统计值名称[https://github.com/firewang/ur.ctwl/blob/master/robot_bomb_statistic_situations.txt]（https://github.com/firewang/ur.ctwl/blob/master/robot_bomb_statistic_situations.txt）
++ 列名称[https://github.com/firewang/ur.ctwl/blob/master/robot_bomb_colnames.txt](https://github.com/firewang/ur.ctwl/blob/master/robot_bomb_colnames.txt)
++ 统计值名称[https://github.com/firewang/ur.ctwl/blob/master/robot_bomb_statistic_situations.txt](https://github.com/firewang/ur.ctwl/blob/master/robot_bomb_statistic_situations.txt)
