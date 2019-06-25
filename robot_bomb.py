@@ -320,10 +320,9 @@ def calculate_cards_value(df):
     df = apart_cards_type(df)  # 牌型拆解
     df = rival_leadcards_treatment(df)  # 提取对手出牌，各出牌情况标记，对手剩余牌
 
-    statistic_procedure_v2(df)   # 统计数据提取
-
     # 存储拆牌后的数据
-    write_data(df, filename='robot_result')
+    write_data(df, filename='robot_result111')
+
     return df
 
 
@@ -1009,7 +1008,55 @@ def statistic_procedure_v2(df):
         lambda row: round(row["lead_bomb_times"] / row["occurrence_times"], 4) if row["occurrence_times"] != 0 else 0,
         axis=1)
 
-    write_data(statistic_df, filename='statistic_result',)
+    # write_data(statistic_df, filename='statistic_result',)
+    return statistic_df
+
+
+def do_statistic_procedure(filepath, prefix='robot_result', grouper=False, out_name='statistic_result'):
+    """
+    对拆牌后打完标记的多个明细数据文件进行统计数据提取
+    :param filepath: 明细标记数据 目录
+    :param prefix: 明细标记数据文件前缀
+    :param grouper: 是否合并多个 统计数据结果（合并处理还是分开处理）
+    :param out_name: 输出文件名，（前缀）
+    :return:grouper=True，则输出一个总的统计文件，grouper=False则输出多个统计文件，和一个总的统计文件
+    """
+    data = pd.DataFrame()
+    allfiles = [file for file in os.listdir(filepath) if file.startswith(prefix)]
+    for file in allfiles:
+        df = pd.read_excel(os.path.join(filepath, file))
+        df = statistic_procedure_v2(df)
+        if grouper:
+            data = pd.concat([data, df], sort=False)
+        else:
+            out_file_name = f"{out_name}-{file.split('.')[0]}"
+            write_data(df, filedir=filepath, filename=out_file_name)
+
+    if grouper:
+        data = data.groupby(list(data.columns)[:-3]).agg({
+            'occurrence_times': np.sum,
+            'lead_bomb_times': np.sum,
+        })
+        data.loc[:, 'probability'] = data.apply(
+            lambda row: round(
+                row["lead_bomb_times"] / row["occurrence_times"], 4) if row["occurrence_times"] != 0 else 0, axis=1)
+        data = data.reset_index(drop=False)
+        write_data(data, filedir=filepath, filename=f"all_{out_name}")
+    else:
+        statistic_files = [file for file in os.listdir(filepath) if file.startswith(out_name)]
+        for statistic_file in statistic_files:
+            statistic_df = pd.read_excel(os.path.join(filepath, statistic_file))
+            data = pd.concat([data, statistic_df], sort=False)
+
+        data = data.groupby(list(data.columns)[:-3]).agg({
+            'occurrence_times': np.sum,
+            'lead_bomb_times': np.sum,
+        })
+        data.loc[:, 'probability'] = data.apply(
+            lambda row: round(
+                row["lead_bomb_times"] / row["occurrence_times"], 4) if row["occurrence_times"] != 0 else 0, axis=1)
+        data = data.reset_index(drop=False)
+        write_data(data, filedir=filepath, filename=f"all_{out_name}", index=False)
 
 
 def main_process(process_test=True, data_sep=10000):
@@ -1033,8 +1080,10 @@ def main_process(process_test=True, data_sep=10000):
             calculate_cards_value(chunk_df)  # 拆牌, 统计
             del chunk_df
 
+    # 统计数据提取
+    do_statistic_procedure(tmpdatadir1, prefix='robot_result', grouper=False, out_name="statistic_result")
 
 if __name__ == '__main__':
     # reduce_raw_data()
-    main_process(True)  # 测试数据
+    main_process(True, data_sep=1)  # 测试数据
     # main_process(process_test=False, data_sep=3000)
