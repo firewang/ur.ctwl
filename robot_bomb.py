@@ -118,6 +118,13 @@ def reduce_raw_data():
         show = pd.read_csv(os.path.join(rawdatadir, show_file), usecols=show_usecols)
         show.to_csv(os.path.join(rawdatadir, f"short_{show_file}"), index=False)
 
+    # 缩减start开局表，有历史对局战绩信息
+    start_usecols = ['uid', 'win', 'loss']  # 历史胜局数，历史输局数
+    start_files = [file for file in os.listdir(rawdatadir) if file.startswith('start')]
+    for start_file in start_files:
+        start = pd.read_csv(os.path.join(rawdatadir, start_file), usecols=start_usecols)
+        start.to_csv(os.path.join(rawdatadir, f"short_{start_file}"), index=False)
+
 
 def basic_treatment(mergedata):
     """
@@ -321,7 +328,7 @@ def calculate_cards_value(df):
     df = rival_leadcards_treatment(df)  # 提取对手出牌，各出牌情况标记，对手剩余牌
 
     # 存储拆牌后的数据
-    write_data(df, filename='robot_result111')
+    write_data(df, filename='robot_result')
 
     return df
 
