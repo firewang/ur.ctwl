@@ -82,7 +82,7 @@ def get_raw_test_data(generate=False, startguid_list=None):
 def get_raw_data(win_ratio=0.5):
     """读取正式数据"""
     # cus_usecols = ['startguid', 'uid', 'cards', 'num','rank'] 起手牌牌id[0-107], 起手牌牌数字[1-14]
-    cus_usecols = ['startguid', 'uid', 'cards', 'rank']  # 起手牌，级牌
+    cus_usecols = ['startguid', 'uid', 'cards', 'rank', 'label_uid']  # 起手牌，级牌，胜率大于要求的用户uid标记
     cus_files = [file for file in os.listdir(rawdatadir) if
                  file.startswith(f'short_win_ratio_{win_ratio}_customization_20190526')]
     print(cus_files)
@@ -1161,4 +1161,4 @@ def main_process(process_test=True, win_ratio=0.5, data_sep=10000):
 if __name__ == '__main__':
     # reduce_raw_data()  # 缩减原始数据体积
     main_process(True, data_sep=1)  # 测试数据
-    # main_process(process_test=False, win_ratio=0.5,data_sep=3000,)
+    # main_process(process_test=False, win_ratio=0.5, data_sep=3000,)
