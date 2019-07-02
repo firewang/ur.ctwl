@@ -1,11 +1,12 @@
 # -*- encoding: utf-8 -*-
-# @Version : 1.3
+# @Version : 1.4
 # @Time    : 2019/6/5 14:05
 # @Author  : wanghd
 # @note    : 用户牌局出炸情况处理（拆牌+ 统计）
 
 
 import os
+import shutil
 import sys
 import time
 from collections import Counter
@@ -1141,6 +1142,10 @@ def main_process(process_test=True, win_ratio=0.5, data_sep=10000):
         mergedata = calculate_cards_value(mergedata)  # 拆牌结果
         statistic_procedure_v2(mergedata)  # 统计结果
     else:
+        latest_result_files = [file for file in os.listdir(outdatadir)]
+        if latest_result_files:
+            for file in latest_result_files:
+                shutil.copy2(os.path.join(outdatadir, file), outdatadir1)  # 对最新数据结果做阶段性备份
         sep_bins = list(range(0, unique_startguid_length+data_sep, data_sep))
         for start_index in range(len(sep_bins)-1):
             chunk_df = mergedata.loc[
