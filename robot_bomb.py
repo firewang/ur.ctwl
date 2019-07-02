@@ -129,7 +129,7 @@ def reduce_raw_data(win_ratio=0.5):
         start.to_csv(os.path.join(rawdatadir, f"short_win_ratio_{win_ratio}_{start_file}"), index=False)  # 保存用户ID
         start.loc[:, 'label_uid'] = start.loc[:, 'win_ratio'].apply(lambda x: 1 if x >= win_ratio else 0)
         start.drop(columns=["win", 'sum', 'win_ratio'], inplace=True)  # 删除多余列
-        start = start.groupby(["uid"]).agg({"label_uid":max}).reset_index(drop=False)  # 删除重复 uid 标记
+        start = start.groupby(["uid"]).agg({"label_uid": max}).reset_index(drop=False)  # 删除重复 uid 标记
         cus = pd.read_csv(os.path.join(rawdatadir, cus_file), usecols=cus_usecols, encoding='gbk')
         # cus = cus.loc[cus.loc[:, "uid"].isin(start_uid)].reset_index(drop=True)  # 不能筛减：对局不完整
         cus = pd.merge(cus, start, on='uid', how='left', copy=False)
@@ -1031,8 +1031,8 @@ def statistic_procedure_v2(df):
         statistic_df.rename(columns=robot_bomb_statistic_situations, inplace=True)
 
         statistic_df.loc[:, 'probability'] = statistic_df.apply(
-            lambda row: round(row["lead_bomb_times"] / row["occurrence_times"], 4) if row["occurrence_times"] != 0 else 0,
-            axis=1)
+            lambda row: round(row["lead_bomb_times"] / row["occurrence_times"], 4)
+            if row["occurrence_times"] != 0 else 0, axis=1)
 
         write_data(statistic_df, filename='statistic_result',)  # 存储统计结果
     return statistic_df, data_length
@@ -1050,13 +1050,14 @@ def do_statistic_procedure(filepath, prefix='robot_result', grouper=False, out_n
     data = pd.DataFrame()
     allfiles = [file for file in os.listdir(filepath) if file.startswith(prefix)]
     for file in allfiles:
-        df = pd.read_excel(os.path.join(filepath, file))
-        df = statistic_procedure_v2(df)
-        if grouper:
-            data = pd.concat([data, df], sort=False)
-        else:
-            out_file_name = f"{out_name}-{file.split('.')[0]}"
-            write_data(df, filedir=filepath, filename=out_file_name)
+        df = pd.read_csv(os.path.join(filepath, file), encoding='gbk')
+        df, _ = statistic_procedure_v2(df)
+        if df.shape[0]:
+            if grouper:
+                data = pd.concat([data, df], sort=False)
+            else:
+                out_file_name = f"{out_name}-{file.split('.')[0]}"
+                write_data(df, filedir=filepath, filename=out_file_name)
 
     if grouper:
         data = data.groupby(list(data.columns)[:-3]).agg({
@@ -1071,7 +1072,7 @@ def do_statistic_procedure(filepath, prefix='robot_result', grouper=False, out_n
     else:
         statistic_files = [file for file in os.listdir(filepath) if file.startswith(out_name)]
         for statistic_file in statistic_files:
-            statistic_df = pd.read_excel(os.path.join(filepath, statistic_file))
+            statistic_df = pd.read_csv(os.path.join(filepath, statistic_file), encoding='gbk')
             data = pd.concat([data, statistic_df], sort=False)
 
         data = data.groupby(list(data.columns)[:-3]).agg({
@@ -1111,6 +1112,8 @@ def circle_statistic_procedure(df, filepath, data_length):
     else:
         previous_data_length = df.shape[0]
 
+    for file in files:
+        os.remove(os.path.join(filepath, file))
     write_data(df, filedir=filepath, filename=f"latest_{previous_data_length}", index=False)
 
 
