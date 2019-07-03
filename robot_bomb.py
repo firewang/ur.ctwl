@@ -1,6 +1,7 @@
 # -*- encoding: utf-8 -*-
-# @Version : 1.4
+# @Version : 2.0
 # @Time    : 2019/6/5 14:05
+# @Time    : 2019/7/3 13:46
 # @Author  : wanghd
 # @note    : 用户牌局出炸情况处理（拆牌+ 统计）
 
@@ -233,19 +234,19 @@ def basic_treatment(mergedata):
 def calculate_lead_cards_value(df):
     """调用拆牌程序取 出牌 的牌值"""
     base_path = "F:/CardsValue"
-    inputfile = os.path.join(base_path, 'Input.txt')
-    if os.path.exists(inputfile):
-        os.remove(inputfile)
-    outputfile = os.path.join(base_path, 'Output.txt')
-    if os.path.exists(outputfile):
-        os.remove(outputfile)
+    input_file = os.path.join(base_path, 'Input.txt')
+    if os.path.exists(input_file):
+        os.remove(input_file)
+    output_file = os.path.join(base_path, 'Output.txt')
+    if os.path.exists(output_file):
+        os.remove(output_file)
 
     df_tmp = df.loc[df.loc[:, 'type'] > 0, ['startguid', 'uid', 'cards_order', 'rank', 'cards']]
     df_tmp = df_tmp.reset_index(drop=True)
     df_tmp.loc[:, 'leadcards_str'] = df_tmp.apply(
         lambda row: str(row["startguid"]) + str(row["uid"]) + str(row["cards_order"]), axis=1)
     # 写入牌面信息 到 input
-    with open(os.path.join(base_path, 'Input.txt'), 'a') as f:
+    with open(input_file, 'a') as f:
         for rowid in range(df_tmp.shape[0]):
             f.write(df_tmp.at[rowid, 'leadcards_str'])
             card_list = str(df_tmp.at[rowid, 'cards']).split(',')
@@ -265,7 +266,7 @@ def calculate_lead_cards_value(df):
 
     # 读取拆牌信息
     df_cardsvalue = pd.DataFrame(columns=['leadcards_str', 'leadcards_cardvalue'])
-    with open(os.path.join(base_path, 'Output.txt'), 'r') as fout:
+    with open(output_file, 'r') as fout:
         out = fout.readlines()
         for index, line in enumerate(out, start=1):
             if index % 5 == 1:
@@ -316,11 +317,6 @@ def calculate_cards_value(df):
     # 执行 CalculatorCardsValue.exe 获得拆牌信息
     subprocess.call(os.path.join(base_path, 'CalculatorCardsValue3.exe'))
 
-    # win32api.keybd_event(13, 0, 0, 0)  # enter 键 位码是13  按键
-    # win32api.keybd_event(17, 0, 0, 0)  # ctrl 键 位码是17
-    # win32api.keybd_event(13, 0, win32con.KEYEVENTF_KEYUP, 0) 释放按键
-    # win32api.keybd_event(17, 0, win32con.KEYEVENTF_KEYUP, 0)
-
     # 读取拆牌信息
     df_cardsvalue_cols = ['leftcards_str', 'cards_value', 'cards_type']
     # 加速读取速度
@@ -328,9 +324,9 @@ def calculate_cards_value(df):
     df_cardsvalue.dropna(inplace=True)
     if df_cardsvalue.shape[0] % 4 == 0:
         df_cardsvalue.loc[:, "mark"] = df_cardsvalue.index // 4  # 验证结果数目
-        df_cardsvalue = df_cardsvalue.groupby('mark').apply(lambda x: x.T)
-        df_cardsvalue = df_cardsvalue.loc[(slice(None), "result_abd"), :].reset_index(drop=True)
-        df_cardsvalue.drop(columns=list(df_cardsvalue.columns)[-2], inplace=True)
+        df_cardsvalue = df_cardsvalue.groupby('mark').apply(lambda x: x.T)  # 转置分组后的 series，mark列会变成行
+        df_cardsvalue = df_cardsvalue.loc[(slice(None), "result_abd"), :].reset_index(drop=True)  # 筛出结果，去除mark行
+        df_cardsvalue.drop(columns=list(df_cardsvalue.columns)[-2], inplace=True)  # 删除结果中ID组列
         df_cardsvalue.columns = ['leftcards_str', 'cards_value', 'cards_type']
     else:
         df_cardsvalue = pd.DataFrame(columns=df_cardsvalue_cols)
@@ -350,7 +346,7 @@ def calculate_cards_value(df):
     # 存储拆牌前的数据
     # write_data(df, filename='robot_001_notchaipai')
 
-    df = pd.merge(df, df_cardsvalue, on=['leftcards_str'], how='left', copy=False)
+    df = pd.merge(df, df_cardsvalue, on=['leftcards_str'], how='left', copy=False)  # 合并牌力值拆牌信息
     df.drop(columns=["leftcards_str"], inplace=True)  # 删除合并标识列 leftcards_str
 
     df = calculate_lead_cards_value(df)  # 出牌牌值计算
@@ -419,80 +415,67 @@ def apart_cards_type(df):
     df = pd.concat([df, df_apart], axis=1)
     df.drop(columns=['apartcol'], inplace=True)
 
-    # 统计手牌非炸弹牌型平均牌值
-    def calculate_mean_cards_value(x):
-        tmp_list = []
-        cards_list = str(x).split(sep='||')
-        # print(cards_list)
-        for card in cards_list:
-            if 'nan' not in card:
-                card_type, _, card_value = card.split(sep='-')
-                if card_type not in ['4096', '16384', '32768', '524288']:
-                    tmp_list.append(int(card_value))
-        return np.round(np.mean(tmp_list), 2)
+    # 统计剩余手牌的信息
+    #  1.剩余最大炸类型，2.剩余最大炸 牌数，3.剩余炸弹数,4 非炸弹手数：出完牌的手数,5 非炸牌型平均牌值
+    result_cols = ["leftmaxbomb", 'leftmaxbomb_cardnum', 'leftbomb_nums', 'Nonebomb_lefthands',
+                   'Nonebomb_MeanCardvalue']
 
-    # 统计手牌非炸弹牌型平均牌值
-    df.loc[:, 'Nonebomb_MeanCardvalue'] = df.loc[:, 'cards_type'].apply(calculate_mean_cards_value)
-
-    # 手牌非炸弹手数( 可以与 统计平均牌值 合并为一个方法)
-    def calculate_lefthands(x):
-        """非炸弹手牌：出完牌的手数"""
-        tmp_list = []
-        cards_list = str(x).split(sep='||')  # ['1-1-8','2-2-10'],
-        # print(cards_list)
-        for card in cards_list:
-            if 'nan' not in card:
-                card_type, _, _ = card.split(sep='-')
-                if card_type not in ['4096', '16384', '32768', '524288']:
-                    tmp_list.append(card_type)
-        # 所有牌型数量- min{对子数，三张数}
-        shoushu = len(tmp_list) - min(tmp_list.count('2'), tmp_list.count("4"))
-        return shoushu
-
-    # 统计手牌非炸弹牌 手数——几手出完
-    df.loc[:, 'Nonebomb_lefthands'] = df.loc[:, 'cards_type'].apply(calculate_lefthands)
-
-    # 剩余手牌中炸弹数量
-    def calculate_leftbombs(x):
-        """手牌中炸弹数量"""
-        tmp_list = []
-        cards_list = str(x).split(sep='||')  # ['1-1-8','2-2-10'],
-        # print(cards_list)
-        for card in cards_list:
-            if 'nan' not in card:
-                card_type, _, _ = card.split(sep='-')
-                if card_type in ['4096', '16384', '32768', '524288']:
-                    tmp_list.append(card_type)
-        return len(tmp_list)
-
-    # 剩余炸弹数量
-    df.loc[:, 'leftbomb_nums'] = df.loc[:, 'cards_type'].apply(calculate_leftbombs)
-
-    # 剩余最大炸弹判断
-    def calculate_maxbomb(x):
-        """判断剩余最大炸弹的大小，【4炸小于10 --1，同花顺--2，其他--0】"""
+    def calculate_lefthand_cards(x):
+        """判断剩余最大炸弹的大小，【4炸小于10 --1，同花顺--2，其他--0】
+        剩余最大炸的牌的数量
+        剩余炸弹数
+        非炸弹牌型手数
+        非炸弹牌型平均牌值"""
+        result_list = []
         bomb_list = []  # 由炸弹 (cardtype, cardnum, cardvalue) 元组构成的列表
+        not_bomb_list = []  # 非炸手牌的牌型列表
+        not_bomb_mean_cards_value = []  # 非炸手牌牌型牌值列表
         cards_list = str(x).split(sep='||')  # ['1-1-8','2-2-10'],
         for card in cards_list:
             if 'nan' not in card:
                 card_type, card_num, card_value = card.split(sep='-')
                 if card_type in ['4096', '16384', '32768', '524288']:
                     bomb_list.append((card_type, card_num, card_value))
+                else:
+                    not_bomb_list.append(card_type)  # 非炸手牌牌型值
+                    not_bomb_mean_cards_value.append(int(card_value))  # 非炸手牌牌值
 
-        bomb_list_length = len(bomb_list)
+        bomb_list_length = len(bomb_list)  # 剩余炸弹数量
         if bomb_list_length > 0:
             card_type, card_num, card_value = bomb_list[-1]
+            # 最大炸类型
             if card_type in ['16384', '32768', '524288']:
-                return 2
+                result_list.append(2)
             elif card_type in ['4096'] and card_num in ['4'] and int(card_value) < 9:
-                return 1
+                result_list.append(1)
             else:
-                return 0
+                result_list.append(0)
+            result_list.append(int(card_num))  # 最大炸牌数
         else:
-            return 0
+            result_list.append(0)  # 最大炸类型
+            result_list.append(0)  # 最大炸牌数
+        result_list.append(bomb_list_length)  # 剩余炸弹数
 
-    # 判断 剩余的最大炸弹
-    df.loc[:, 'leftmaxbomb'] = df.loc[:, 'cards_type'].apply(calculate_maxbomb)
+        # 非炸其他所有牌型数量 - min{对子数，三张数}
+        shoushu = len(not_bomb_list) - min(not_bomb_list.count('2'), not_bomb_list.count("4"))
+        result_list.append(shoushu)
+
+        # 非炸手牌平均牌值
+        result_list.append(np.round(np.mean(not_bomb_mean_cards_value), 2))
+        return ",".join([str(x) for x in result_list])
+
+    # 判断剩余牌统计值
+    df.loc[:, 'apartcol'] = df.loc[:, 'cards_type'].apply(calculate_lefthand_cards)
+
+    # 将拆分得到的剩余牌信息 展开到 列
+    df_apart = df.loc[:, 'apartcol'].str.split(',', expand=True)
+    # 重命名展开的列名
+    df_apart.columns = result_cols
+    for colname in result_cols[:-1]:
+        df_apart.loc[:, colname] = df_apart.loc[:, colname].astype(int)  # 修改所有拆分列为int
+    # 将展开列 合并回原始 df ,并删除拆分列
+    df = pd.concat([df, df_apart], axis=1)
+    df.drop(columns=['apartcol'], inplace=True)
 
     return df
 
@@ -512,6 +495,45 @@ def rival_leadcards_treatment(df):
     df = df.reset_index(drop=True)
     start_guids = df.loc[:, 'startguid'].unique()
     statistic_df = pd.DataFrame()
+
+    def compare_bomb(compare_df, compare_idx, plus_idx):
+        bomb_type_list = [4096, 16384, 32768, 524288]
+        bomb_array = compare_df.loc[compare_idx + plus_idx, ['optype4096_maxcardvalue',
+                                                             'optype16384_maxcardvalue',
+                                                             'optype32768_maxcardvalue',
+                                                             'optype524288_maxcardvalue']].values
+        inhand_bomb_max_cardvalue = int(np.max(bomb_array))  # 最大炸牌值
+        inhand_bomb_max_type = bomb_type_list[int(np.argmax(bomb_array))]  # 最大炸类型
+        # 判断炸弹类型大小
+        # 比类型
+        if inhand_bomb_max_type > compare_df.at[compare_idx, 'type']:
+            compare_df.at[compare_idx + plus_idx, 'lead_bomb'] = 1  # 标记对手出炸
+            compare_df.at[compare_idx + plus_idx, 'need_bomb'] = 1  # 需要出炸
+            if compare_df.at[compare_idx, "first_hand"] > 0:
+                compare_df.at[compare_idx + plus_idx, 'lead_firsthand_bomb'] = 1  # 标记为开局出炸
+            if compare_df.at[compare_idx + plus_idx, 'type'] > 0:
+                compare_df.at[compare_idx + plus_idx, 'label_bomb'] = 1  # 出炸
+        # 类型相同比牌数
+        elif inhand_bomb_max_type == compare_df.at[compare_idx, 'type']:
+            bomb_card_nums = len(str(compare_df.at[compare_idx, 'cards']).split(","))  # 出牌炸弹的牌数
+            if compare_df.at[compare_idx + plus_idx, 'leftmaxbomb_cardnum'] > bomb_card_nums:
+                compare_df.at[compare_idx + plus_idx, 'lead_bomb'] = 1  # 标记对手出炸
+                compare_df.at[compare_idx + plus_idx, 'need_bomb'] = 1  # 需要出炸
+                if compare_df.at[compare_idx, "first_hand"] > 0:
+                    compare_df.at[compare_idx + plus_idx, 'lead_firsthand_bomb'] = 1  # 标记为开局出炸
+                if compare_df.at[compare_idx + plus_idx, 'type'] > 0:
+                    compare_df.at[compare_idx + plus_idx, 'label_bomb'] = 1  # 出炸
+            # 牌数相同比牌值
+            elif compare_df.at[compare_idx + plus_idx, 'leftmaxbomb_cardnum'] == bomb_card_nums:
+                if inhand_bomb_max_cardvalue > int(compare_df.at[compare_idx, 'leadcards_cardvalue']):
+                    compare_df.at[compare_idx + plus_idx, 'lead_bomb'] = 1  # 标记对手出炸
+                    compare_df.at[compare_idx + plus_idx, 'need_bomb'] = 1  # 需要出炸
+                    if compare_df.at[compare_idx, "first_hand"] > 0:
+                        compare_df.at[compare_idx + plus_idx, 'lead_firsthand_bomb'] = 1  # 标记为开局出炸
+                    if compare_df.at[compare_idx + plus_idx, 'type'] > 0:
+                        compare_df.at[compare_idx + plus_idx, 'label_bomb'] = 1  # 出炸
+        return compare_df
+
     for start_guid in start_guids:
         gamedf = df.loc[df.loc[:, 'startguid'] == start_guid]
         gamedf = gamedf.sort_values(by=["playtime_unix"], ascending=True)  # 根据出牌顺序排序
@@ -572,33 +594,11 @@ def rival_leadcards_treatment(df):
         for idx in range(idx_length - 3):
             if gamedf.at[idx, 'type'] in [4096, 16384, 32768, 524288]:
                 # 对手出炸弹
-                inhand_bomb_max_cardvalue = int(np.max(gamedf.loc[
-                                                           idx + 1, ['optype4096_maxcardvalue',
-                                                                     'optype16384_maxcardvalue',
-                                                                     'optype32768_maxcardvalue',
-                                                                     'optype524288_maxcardvalue']].values))
-                if inhand_bomb_max_cardvalue > int(gamedf.at[idx, 'leadcards_cardvalue']):
-                    gamedf.at[idx + 1, 'lead_bomb'] = 1  # 标记对手出炸
-                    gamedf.at[idx + 1, 'need_bomb'] = 1  # 需要出炸
-                    if gamedf.at[idx, "first_hand"] > 0:
-                        gamedf.at[idx + 1, 'lead_firsthand_bomb'] = 1  # 标记为开局出炸
-                    if gamedf.at[idx + 1, 'type'] > 0:
-                        gamedf.at[idx + 1, 'label_bomb'] = 1  # 出炸
-
+                gamedf = compare_bomb(gamedf, idx, 1)
                 if gamedf.at[idx+1, 'type'] == 0 and gamedf.at[idx+2, 'type'] == 0:
                     # 第二位，不出，不出 的情况
-                    inhand_bomb_max_cardvalue = int(np.max(gamedf.loc[
-                                                               idx + 1, ['optype4096_maxcardvalue',
-                                                                         'optype16384_maxcardvalue',
-                                                                         'optype32768_maxcardvalue',
-                                                                         'optype524288_maxcardvalue']].values))
-                    if inhand_bomb_max_cardvalue > int(gamedf.at[idx, 'leadcards_cardvalue']):
-                        gamedf.at[idx + 3, 'lead_bomb'] = 1  # 标记对手出炸
-                        gamedf.at[idx + 3, 'need_bomb'] = 1  # 需要出炸
-                        if gamedf.at[idx, "first_hand"] > 0:
-                            gamedf.at[idx + 3, 'lead_firsthand_bomb'] = 1  # 标记第二个玩家的开局出炸
-                        if gamedf.at[idx + 3, 'type'] > 0:
-                            gamedf.at[idx + 3, 'label_bomb'] = 1  # 出炸
+                    gamedf = compare_bomb(gamedf, idx, 3)
+
             elif gamedf.at[idx, 'type'] in [1]:
                 # 出单张
                 # 判断是否最大单张
@@ -785,14 +785,7 @@ def rival_leadcards_treatment(df):
             # 倒数第三手和倒数第二手的情况
             if gamedf.at[idx, 'type'] in [4096, 16384, 32768, 524288]:
                 # 对手出炸弹
-                if int(max(gamedf.loc[
-                               idx + 1, ['optype4096_maxcardvalue', 'optype16384_maxcardvalue',
-                                         'optype32768_maxcardvalue',
-                                         'optype524288_maxcardvalue']])) > int(gamedf.at[idx, 'leadcards_cardvalue']):
-                    gamedf.at[idx + 1, 'lead_bomb'] = 1  # 标记对手出炸
-                    gamedf.at[idx + 1, 'need_bomb'] = 1  # 需要出炸
-                    if gamedf.at[idx + 1, 'type'] > 0:
-                        gamedf.at[idx + 1, 'label_bomb'] = 1  # 出炸
+                gamedf = compare_bomb(gamedf, idx, 1)
             elif gamedf.at[idx, 'type'] in [1]:
                 # 出单张
                 max_optype1_cardvalue = get_unique_max(gamedf.loc[idx+1:, 'optype1_maxcardvalue'])
@@ -1103,8 +1096,7 @@ def circle_statistic_procedure(df, filepath, data_length):
     """
     df 当前统计数据结果
     filepath 确定文件路径
-    data_length 局数
-    data_sep: 分割局数"""
+    data_length 局数"""
     files = [file for file in os.listdir(filepath) if file.startswith("latest")]
     if files:
         previous_data_length = int(files[-1].split("_")[1])
