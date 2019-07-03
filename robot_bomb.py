@@ -288,14 +288,14 @@ def calculate_lead_cards_value(df):
 def calculate_cards_value(df):
     """调用拆牌程序拆解剩余手牌"""
     base_path = "F:/CardsValue"
-    inputfile = os.path.join(base_path, 'Input.txt')
-    if os.path.exists(inputfile):
-        os.remove(inputfile)
-    outputfile = os.path.join(base_path, 'Output.txt')
-    if os.path.exists(outputfile):
-        os.remove(outputfile)
+    input_file = os.path.join(base_path, 'Input.txt')
+    if os.path.exists(input_file):
+        os.remove(input_file)
+    output_file = os.path.join(base_path, 'Output.txt')
+    if os.path.exists(output_file):
+        os.remove(output_file)
     # 写入牌面信息 到 input
-    with open(os.path.join(base_path, 'Input.txt'), 'a') as f:
+    with open(input_file, 'a') as f:
         previous_card = ''  # 用于记录上轮出牌的临时变量，以便于排除不出牌
         for rowid in range(df.shape[0]):
             if df.at[rowid, 'leftcards_str'] and df.at[rowid, 'leftcards_str'] != previous_card:
@@ -322,17 +322,29 @@ def calculate_cards_value(df):
     # win32api.keybd_event(17, 0, win32con.KEYEVENTF_KEYUP, 0)
 
     # 读取拆牌信息
-    df_cardsvalue = pd.DataFrame(columns=['leftcards_str', 'cards_value', 'cards_type'])
-    with open(os.path.join(base_path, 'Output.txt'), 'r') as fout:
-        out = fout.readlines()
-        for index, line in enumerate(out, start=1):
-            if index % 5 == 1:
-                df_cardsvalue.at[index - 1, 'leftcards_str'] = line.strip()
-            if index % 5 == 3:
-                df_cardsvalue.at[index - 3, 'cards_value'] = line.strip()
-            if index % 5 == 0:
-                df_cardsvalue.at[index - 5, 'cards_type'] = line.strip()
-            # print(index, line)
+    df_cardsvalue_cols = ['leftcards_str', 'cards_value', 'cards_type']
+    # 加速读取速度
+    df_cardsvalue = pd.read_csv(output_file, header=None, names=["result_abd"])
+    df_cardsvalue.dropna(inplace=True)
+    if df_cardsvalue.shape[0] % 4 == 0:
+        df_cardsvalue.loc[:, "mark"] = df_cardsvalue.index // 4  # 验证结果数目
+        df_cardsvalue = df_cardsvalue.groupby('mark').apply(lambda x: x.T)
+        df_cardsvalue = df_cardsvalue.loc[(slice(None), "result_abd"), :].reset_index(drop=True)
+        df_cardsvalue.drop(columns=list(df_cardsvalue.columns)[-2], inplace=True)
+        df_cardsvalue.columns = ['leftcards_str', 'cards_value', 'cards_type']
+    else:
+        df_cardsvalue = pd.DataFrame(columns=df_cardsvalue_cols)
+        # 不满足结果数目的情况，使用 readline 保证完整记录可被记录
+        with open(output_file, 'r') as fout:
+            out = fout.readlines()
+            for index, line in enumerate(out, start=1):
+                if index % 5 == 1:
+                    df_cardsvalue.at[index - 1, 'leftcards_str'] = line.strip()
+                if index % 5 == 3:
+                    df_cardsvalue.at[index - 3, 'cards_value'] = line.strip()
+                if index % 5 == 0:
+                    df_cardsvalue.at[index - 5, 'cards_type'] = line.strip()
+                # print(index, line)
 
     df_cardsvalue.drop_duplicates(inplace=True)
     # 存储拆牌前的数据
