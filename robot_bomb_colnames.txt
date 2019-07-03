@@ -37,6 +37,7 @@ colname = {
 "Nonebomb_lefthands":"手牌非炸手数",
 "leftbomb_nums":"剩余炸弹数",
 "leftmaxbomb":"剩余最大炸弹类型1四炸小于十2同花0其他",
+"leftmaxbomb_cardnum":"剩余最大炸的牌数",
 "leftcards_nums_pair":"队友剩余牌数",
 "rival_leftcards_nums":"出牌对手剩余牌数",
 "rival_leftcards_nums_pair":"出牌对手队友剩余牌数",
