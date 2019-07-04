@@ -259,7 +259,10 @@ def calculate_lead_cards_value(df):
             f.write(os.linesep)
             # 将级牌拼接到牌组后面
             cards_str = ','.join([str(cards_id) for cards_id in card_list])
-            current_rank = str(int(df_tmp.at[rowid, 'rank']))
+            try:
+                current_rank = str(int(df.at[rowid, 'rank']))
+            except ValueError:
+                current_rank = '1'
             cards_str = f'{cards_str}||{current_rank}'
             f.write(cards_str)
             f.write(os.linesep)
@@ -312,7 +315,10 @@ def calculate_cards_value(df):
                 f.write(os.linesep)
                 # 将级牌拼接到牌组后面
                 cards_str = ','.join([str(cards_id) for cards_id in card_list])
-                current_rank = str(int(df.at[rowid, 'rank']))
+                try:
+                    current_rank = str(int(df.at[rowid, 'rank']))
+                except ValueError:
+                    current_rank = '1'
                 cards_str = f'{cards_str}||{current_rank}'
                 f.write(cards_str)
                 f.write(os.linesep)
