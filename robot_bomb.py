@@ -86,7 +86,7 @@ def get_raw_data(win_ratio=0.5):
     # cus_usecols = ['startguid', 'uid', 'cards', 'num','rank'] 起手牌牌id[0-107], 起手牌牌数字[1-14]
     cus_usecols = ['startguid', 'uid', 'cards', 'rank', 'label_uid']  # 起手牌，级牌，胜率大于要求的用户uid标记
     cus_files = [file for file in os.listdir(rawdatadir) if
-                 file.startswith(f'short_win_ratio_{win_ratio}_customization_20190526')]
+                 file.startswith(f'short_win_ratio_{win_ratio}_customization_20190626')]
     print(cus_files)
     name_dict = {'cards': "cards_init", 'num': 'num_init'}  # 重命名为 初始牌组
 
@@ -95,7 +95,7 @@ def get_raw_data(win_ratio=0.5):
     # ['startguid', 'uid', 'starttime_unix', 'playtime_unix', 'type', 'cards_order', 'cards', 'num']
     show_usecols = ['startguid', 'uid', 'starttime_unix', 'playtime_unix', 'type', 'cards_order', 'cards']
     show_files = [file for file in os.listdir(rawdatadir) if
-                  file.startswith(f'short_win_ratio_{win_ratio}_showcards_20190526')]
+                  file.startswith(f'short_win_ratio_{win_ratio}_showcards_20190626')]
     print(show_files)
     for cus_file, show_file in zip(cus_files, show_files):
         cus = pd.read_csv(os.path.join(rawdatadir, cus_file), usecols=cus_usecols, encoding='gbk')  # 读取定制信息
@@ -114,13 +114,13 @@ def reduce_raw_data(win_ratio=0.5):
     first_init()
     # 缩减customization 定制表体积
     cus_usecols = ['startguid', 'uid', 'cards', 'rank']  # 起手牌,级牌
-    cus_files = [file for file in os.listdir(rawdatadir) if file.startswith('customization_20190526')]
+    cus_files = [file for file in os.listdir(rawdatadir) if file.startswith('customization_20190626')]
     # 缩减showcards 出牌信息表体积
     show_usecols = ['startguid', 'uid', 'starttime_unix', 'playtime_unix', 'type', 'cards_order', 'cards']
-    show_files = [file for file in os.listdir(rawdatadir) if file.startswith('showcards_20190526')]
+    show_files = [file for file in os.listdir(rawdatadir) if file.startswith('showcards_20190626')]
     # 缩减start开局表，有历史对局战绩信息
     start_usecols = ['uid', 'win', 'loss']  # 历史胜局数，历史输局数
-    start_files = [file for file in os.listdir(rawdatadir) if file.startswith('start_20190526')]
+    start_files = [file for file in os.listdir(rawdatadir) if file.startswith('start_20190626')]
 
     for start_file, cus_file, show_file in zip(start_files, cus_files, show_files):
         start = pd.read_csv(os.path.join(rawdatadir, start_file), usecols=start_usecols, encoding='gbk')
@@ -153,6 +153,8 @@ def basic_treatment(mergedata):
     """
     # 填充对局的rank
     mergedata.loc[:, 'rank'] = mergedata.loc[:, 'rank'].fillna(method='ffill')
+    # 填充胜率大于等于要求的uid标记
+    mergedata.loc[:, 'label_uid'] = mergedata.loc[:, 'label_uid'].fillna(method='ffill')
 
     # write_data(mergedata, filename='mergedata')
     # # 将出牌ID 和 牌型ID 转为set
@@ -1097,6 +1099,8 @@ def circle_statistic_procedure(df, filepath, data_length):
     df 当前统计数据结果
     filepath 确定文件路径
     data_length 局数"""
+    if not os.path.exists(filepath):
+        os.mkdir(filepath)
     files = [file for file in os.listdir(filepath) if file.startswith("latest")]
     if files:
         previous_data_length = int(files[-1].split("_")[1])
@@ -1115,7 +1119,7 @@ def circle_statistic_procedure(df, filepath, data_length):
                 row["lead_bomb_times"] / row["occurrence_times"], 4) if row["occurrence_times"] != 0 else 0, axis=1)
         df = df.reset_index(drop=False)
     else:
-        previous_data_length = df.shape[0]
+        previous_data_length = df.startguid.nunique()
 
     for file in files:
         os.remove(os.path.join(filepath, file))
@@ -1139,6 +1143,32 @@ def main_process(process_test=True, win_ratio=0.5, data_sep=10000):
     else:
         mergedata = get_raw_data(win_ratio=win_ratio)  # 读取正式数据
 
+    def combine_result_files(result_filepath):
+        if os.path.exists(result_filepath):
+            #  标记结果合并
+            robot_result = pd.DataFrame()
+            robot_result_files = [file for file in os.listdir(tmpdatadir1) if file.startswith("robot_result")]
+            if robot_result_files:
+                for file in robot_result_files:
+                    filepath = os.path.join(tmpdatadir1, file)
+                    data_file = pd.read_csv(filepath, encoding='gbk', header=0)
+                    robot_result = pd.concat([robot_result, data_file], axis=0, sort=False, copy=False)
+                    os.remove(filepath)
+                write_data(robot_result, filedir=result_filepath, filename='robot_result')
+            #  统计结果合并
+            statistic_result = pd.DataFrame()
+            statistic_result_files = [file for file in os.listdir(tmpdatadir1) if file.startswith("statistic_result")]
+            if statistic_result_files:
+                for file in statistic_result_files:
+                    filepath = os.path.join(tmpdatadir1, file)
+                    data_file = pd.read_csv(filepath, encoding='gbk', header=0)
+                    statistic_result = pd.concat([statistic_result, data_file], axis=0, sort=False, copy=False)
+                    os.remove(filepath)
+                write_data(statistic_result, filedir=result_filepath, filename='statistic_result')
+        else:
+            os.mkdir(result_filepath)
+            combine_result_files(result_filepath)
+
     unique_startguid = mergedata.loc[:, "startguid"].unique()
     unique_startguid_length = len(unique_startguid)
     if unique_startguid_length < data_sep:
@@ -1157,10 +1187,13 @@ def main_process(process_test=True, win_ratio=0.5, data_sep=10000):
             chunk_df.reset_index(drop=True, inplace=True)
             chunk_df = basic_treatment(chunk_df)  # 初步处理
             chunk_df = calculate_cards_value(chunk_df)  # 拆牌结果
+            # write_data(chunk_df, filename='aaaaaaaaa')
             chunk_df, data_length = statistic_procedure_v2(chunk_df)  # 前置，统计结果
             if chunk_df.shape[0]:
                 # 生成latest版本统计结果
-                circle_statistic_procedure(chunk_df, outdatadir, data_length=data_length)
+                circle_statistic_procedure(chunk_df, os.path.join(tmpdatadir1, '20190626'), data_length=data_length)
+            if start_index % 500 == 0:
+                combine_result_files(os.path.join(tmpdatadir1, '20190626'))
             # del chunk_df
 
     # 后置，统计数据提取
@@ -1169,5 +1202,5 @@ def main_process(process_test=True, win_ratio=0.5, data_sep=10000):
 
 if __name__ == '__main__':
     # reduce_raw_data()  # 缩减原始数据体积
-    main_process(True, data_sep=1)  # 测试数据
-    # main_process(process_test=False, win_ratio=0.5, data_sep=3000,)
+    # main_process(True, data_sep=4)  # 测试数据
+    main_process(process_test=False, win_ratio=0.5, data_sep=1, )
