@@ -1094,11 +1094,12 @@ def do_statistic_procedure(filepath, prefix='robot_result', grouper=False, out_n
         write_data(data, filedir=filepath, filename=f"all_{out_name}", index=False)
 
 
-def circle_statistic_procedure(df, filepath, data_length):
+def circle_statistic_procedure(df, filepath, data_length, all_data_length):
     """
     df 当前统计数据结果
     filepath 确定文件路径
-    data_length 局数"""
+    data_length 局数
+    all_data_length 总对局数"""
     if not os.path.exists(filepath):
         os.mkdir(filepath)
     files = [file for file in os.listdir(filepath) if file.startswith("latest")]
@@ -1119,11 +1120,11 @@ def circle_statistic_procedure(df, filepath, data_length):
                 row["lead_bomb_times"] / row["occurrence_times"], 4) if row["occurrence_times"] != 0 else 0, axis=1)
         df = df.reset_index(drop=False)
     else:
-        previous_data_length = df.startguid.nunique()
+        previous_data_length = data_length
 
     for file in files:
         os.remove(os.path.join(filepath, file))
-    write_data(df, filedir=filepath, filename=f"latest_{previous_data_length}", index=False)
+    write_data(df, filedir=filepath, filename=f"latest_{previous_data_length}_{all_data_length}", index=False)
 
 
 def main_process(process_test=True, win_ratio=0.5, data_sep=10000):
@@ -1191,9 +1192,10 @@ def main_process(process_test=True, win_ratio=0.5, data_sep=10000):
             chunk_df, data_length = statistic_procedure_v2(chunk_df)  # 前置，统计结果
             if chunk_df.shape[0]:
                 # 生成latest版本统计结果
-                circle_statistic_procedure(chunk_df, os.path.join(tmpdatadir1, '20190626'), data_length=data_length)
+                circle_statistic_procedure(chunk_df, os.path.join(tmpdatadir1, '20190626'),
+                                           data_length=data_length, all_data_length=start_index + 1)
             if start_index % 500 == 0:
-                combine_result_files(os.path.join(tmpdatadir1, '20190626'))
+                combine_result_files(os.path.join(tmpdatadir1, '20190626', 'detail_result'))
             # del chunk_df
 
     # 后置，统计数据提取
