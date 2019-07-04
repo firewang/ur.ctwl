@@ -7,7 +7,7 @@
 
 
 import os
-import shutil
+# import shutil
 import sys
 import time
 from collections import Counter
@@ -1182,10 +1182,10 @@ def main_process(process_test=True, win_ratio=0.5, data_sep=10000):
         mergedata = calculate_cards_value(mergedata)  # 拆牌结果
         statistic_procedure_v2(mergedata)  # 统计结果
     else:
-        latest_result_files = [file for file in os.listdir(outdatadir)]
-        if latest_result_files:
-            for file in latest_result_files:
-                shutil.copy2(os.path.join(outdatadir, file), outdatadir1)  # 对最新数据结果做阶段性备份
+        # latest_result_files = [file for file in os.listdir(outdatadir)]
+        # if latest_result_files:
+        #     for file in latest_result_files:
+        #         shutil.copy2(os.path.join(outdatadir, file), outdatadir1)  # 对最新数据结果做阶段性备份
         sep_bins = list(range(0, unique_startguid_length+data_sep, data_sep))
         sep_bins_length = len(sep_bins)
         for start_index in range(sep_bins_length-1):
