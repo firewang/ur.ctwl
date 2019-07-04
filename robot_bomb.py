@@ -41,6 +41,8 @@ def first_init():
 
 
 def write_data(df, filedir='D:/projectsHome/ur.ctwl/tmpdata1', filename='robot_bomb', index=False):
+    if not os.path.exists(filedir):
+        os.mkdir(filedir)
     current_time = time.strftime('%Y%m%d%H%M%S', time.localtime())
     filename = f'{filename}_{current_time}.csv'
     df.to_csv(os.path.join(filedir, filename), index=index, header=True, encoding='gbk')
@@ -86,7 +88,7 @@ def get_raw_data(win_ratio=0.5):
     # cus_usecols = ['startguid', 'uid', 'cards', 'num','rank'] 起手牌牌id[0-107], 起手牌牌数字[1-14]
     cus_usecols = ['startguid', 'uid', 'cards', 'rank', 'label_uid']  # 起手牌，级牌，胜率大于要求的用户uid标记
     cus_files = [file for file in os.listdir(rawdatadir) if
-                 file.startswith(f'short_win_ratio_{win_ratio}_customization_20190626')]
+                 file.startswith(f'short_win_ratio_{win_ratio}_customization_20190526')]
     print(cus_files)
     name_dict = {'cards': "cards_init", 'num': 'num_init'}  # 重命名为 初始牌组
 
@@ -95,7 +97,7 @@ def get_raw_data(win_ratio=0.5):
     # ['startguid', 'uid', 'starttime_unix', 'playtime_unix', 'type', 'cards_order', 'cards', 'num']
     show_usecols = ['startguid', 'uid', 'starttime_unix', 'playtime_unix', 'type', 'cards_order', 'cards']
     show_files = [file for file in os.listdir(rawdatadir) if
-                  file.startswith(f'short_win_ratio_{win_ratio}_showcards_20190626')]
+                  file.startswith(f'short_win_ratio_{win_ratio}_showcards_20190526')]
     print(show_files)
     for cus_file, show_file in zip(cus_files, show_files):
         cus = pd.read_csv(os.path.join(rawdatadir, cus_file), usecols=cus_usecols, encoding='gbk')  # 读取定制信息
@@ -114,13 +116,13 @@ def reduce_raw_data(win_ratio=0.5):
     first_init()
     # 缩减customization 定制表体积
     cus_usecols = ['startguid', 'uid', 'cards', 'rank']  # 起手牌,级牌
-    cus_files = [file for file in os.listdir(rawdatadir) if file.startswith('customization_20190626')]
+    cus_files = [file for file in os.listdir(rawdatadir) if file.startswith('customization_20190526')]
     # 缩减showcards 出牌信息表体积
     show_usecols = ['startguid', 'uid', 'starttime_unix', 'playtime_unix', 'type', 'cards_order', 'cards']
-    show_files = [file for file in os.listdir(rawdatadir) if file.startswith('showcards_20190626')]
+    show_files = [file for file in os.listdir(rawdatadir) if file.startswith('showcards_20190526')]
     # 缩减start开局表，有历史对局战绩信息
     start_usecols = ['uid', 'win', 'loss']  # 历史胜局数，历史输局数
-    start_files = [file for file in os.listdir(rawdatadir) if file.startswith('start_20190626')]
+    start_files = [file for file in os.listdir(rawdatadir) if file.startswith('start_20190526')]
 
     for start_file, cus_file, show_file in zip(start_files, cus_files, show_files):
         start = pd.read_csv(os.path.join(rawdatadir, start_file), usecols=start_usecols, encoding='gbk')
@@ -356,7 +358,7 @@ def calculate_cards_value(df):
     df = rival_leadcards_treatment(df)  # 提取对手出牌，各出牌情况标记，对手剩余牌
 
     # 存储拆牌后的数据
-    write_data(df, filename='robot_result')
+    write_data(df, filedir=os.path.join(tmpdatadir1, '20190526'), filename='robot_result')
 
     return df
 
@@ -1042,7 +1044,8 @@ def statistic_procedure_v2(df):
             lambda row: round(row["lead_bomb_times"] / row["occurrence_times"], 4)
             if row["occurrence_times"] != 0 else 0, axis=1)
 
-        write_data(statistic_df, filename='statistic_result',)  # 存储统计结果
+        # 存储统计结果
+        write_data(statistic_df, filedir=os.path.join(tmpdatadir1, "20190526"), filename='statistic_result', )
     return statistic_df, data_length
 
 
@@ -1148,20 +1151,22 @@ def main_process(process_test=True, win_ratio=0.5, data_sep=10000):
         if os.path.exists(result_filepath):
             #  标记结果合并
             robot_result = pd.DataFrame()
-            robot_result_files = [file for file in os.listdir(tmpdatadir1) if file.startswith("robot_result")]
+            current_result_dir = os.path.join(tmpdatadir1, "20190526")
+            robot_result_files = [file for file in os.listdir(current_result_dir) if file.startswith("robot_result")]
             if robot_result_files:
                 for file in robot_result_files:
-                    filepath = os.path.join(tmpdatadir1, file)
+                    filepath = os.path.join(current_result_dir, file)
                     data_file = pd.read_csv(filepath, encoding='gbk', header=0)
                     robot_result = pd.concat([robot_result, data_file], axis=0, sort=False, copy=False)
                     os.remove(filepath)
                 write_data(robot_result, filedir=result_filepath, filename='robot_result')
             #  统计结果合并
             statistic_result = pd.DataFrame()
-            statistic_result_files = [file for file in os.listdir(tmpdatadir1) if file.startswith("statistic_result")]
+            statistic_result_files = [file for file in os.listdir(current_result_dir) if
+                                      file.startswith("statistic_result")]
             if statistic_result_files:
                 for file in statistic_result_files:
-                    filepath = os.path.join(tmpdatadir1, file)
+                    filepath = os.path.join(current_result_dir, file)
                     data_file = pd.read_csv(filepath, encoding='gbk', header=0)
                     statistic_result = pd.concat([statistic_result, data_file], axis=0, sort=False, copy=False)
                     os.remove(filepath)
@@ -1192,10 +1197,10 @@ def main_process(process_test=True, win_ratio=0.5, data_sep=10000):
             chunk_df, data_length = statistic_procedure_v2(chunk_df)  # 前置，统计结果
             if chunk_df.shape[0]:
                 # 生成latest版本统计结果
-                circle_statistic_procedure(chunk_df, os.path.join(tmpdatadir1, '20190626'),
+                circle_statistic_procedure(chunk_df, os.path.join(tmpdatadir1, '20190526'),
                                            data_length=data_length, all_data_length=start_index + 1)
-            if start_index % 500 == 0:
-                combine_result_files(os.path.join(tmpdatadir1, '20190626', 'detail_result'))
+            if start_index % 10 == 0:
+                combine_result_files(os.path.join(tmpdatadir1, '20190526', 'detail_result'))
             # del chunk_df
 
     # 后置，统计数据提取
