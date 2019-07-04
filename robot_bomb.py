@@ -1,5 +1,5 @@
 # -*- encoding: utf-8 -*-
-# @Version : 2.0
+# @Version : 2.1
 # @Time    : 2019/6/5 14:05
 # @Time    : 2019/7/3 13:46
 # @Author  : wanghd
@@ -40,7 +40,7 @@ def first_init():
     outdatadir1 = os.path.join(os.getcwd(), 'outdata1')
 
 
-def write_data(df, filedir='D:/projectsHome/ur.ctwl/tmpdata1', filename='robot_bomb', index=False):
+def write_data(df, filedir=os.path.join(os.getcwd(), 'tmpdatadir1'), filename='robot_bomb', index=False):
     if not os.path.exists(filedir):
         os.mkdir(filedir)
     current_time = time.strftime('%Y%m%d%H%M%S', time.localtime())
@@ -88,7 +88,7 @@ def get_raw_data(win_ratio=0.5):
     # cus_usecols = ['startguid', 'uid', 'cards', 'num','rank'] 起手牌牌id[0-107], 起手牌牌数字[1-14]
     cus_usecols = ['startguid', 'uid', 'cards', 'rank', 'label_uid']  # 起手牌，级牌，胜率大于要求的用户uid标记
     cus_files = [file for file in os.listdir(rawdatadir) if
-                 file.startswith(f'short_win_ratio_{win_ratio}_customization_20190526')]
+                 file.startswith(f'short_win_ratio_{win_ratio}_customization_20190625')]
     print(cus_files)
     name_dict = {'cards': "cards_init", 'num': 'num_init'}  # 重命名为 初始牌组
 
@@ -97,7 +97,7 @@ def get_raw_data(win_ratio=0.5):
     # ['startguid', 'uid', 'starttime_unix', 'playtime_unix', 'type', 'cards_order', 'cards', 'num']
     show_usecols = ['startguid', 'uid', 'starttime_unix', 'playtime_unix', 'type', 'cards_order', 'cards']
     show_files = [file for file in os.listdir(rawdatadir) if
-                  file.startswith(f'short_win_ratio_{win_ratio}_showcards_20190526')]
+                  file.startswith(f'short_win_ratio_{win_ratio}_showcards_20190625')]
     print(show_files)
     for cus_file, show_file in zip(cus_files, show_files):
         cus = pd.read_csv(os.path.join(rawdatadir, cus_file), usecols=cus_usecols, encoding='gbk')  # 读取定制信息
@@ -116,13 +116,13 @@ def reduce_raw_data(win_ratio=0.5):
     first_init()
     # 缩减customization 定制表体积
     cus_usecols = ['startguid', 'uid', 'cards', 'rank']  # 起手牌,级牌
-    cus_files = [file for file in os.listdir(rawdatadir) if file.startswith('customization_20190526')]
+    cus_files = [file for file in os.listdir(rawdatadir) if file.startswith('customization_20190625')]
     # 缩减showcards 出牌信息表体积
     show_usecols = ['startguid', 'uid', 'starttime_unix', 'playtime_unix', 'type', 'cards_order', 'cards']
-    show_files = [file for file in os.listdir(rawdatadir) if file.startswith('showcards_20190526')]
+    show_files = [file for file in os.listdir(rawdatadir) if file.startswith('showcards_20190625')]
     # 缩减start开局表，有历史对局战绩信息
     start_usecols = ['uid', 'win', 'loss']  # 历史胜局数，历史输局数
-    start_files = [file for file in os.listdir(rawdatadir) if file.startswith('start_20190526')]
+    start_files = [file for file in os.listdir(rawdatadir) if file.startswith('start_20190625')]
 
     for start_file, cus_file, show_file in zip(start_files, cus_files, show_files):
         start = pd.read_csv(os.path.join(rawdatadir, start_file), usecols=start_usecols, encoding='gbk')
@@ -358,7 +358,7 @@ def calculate_cards_value(df):
     df = rival_leadcards_treatment(df)  # 提取对手出牌，各出牌情况标记，对手剩余牌
 
     # 存储拆牌后的数据
-    write_data(df, filedir=os.path.join(tmpdatadir1, '20190526'), filename='robot_result')
+    write_data(df, filedir=os.path.join(tmpdatadir1, '20190625'), filename='robot_result')
 
     return df
 
@@ -1045,7 +1045,7 @@ def statistic_procedure_v2(df):
             if row["occurrence_times"] != 0 else 0, axis=1)
 
         # 存储统计结果
-        write_data(statistic_df, filedir=os.path.join(tmpdatadir1, "20190526"), filename='statistic_result', )
+        write_data(statistic_df, filedir=os.path.join(tmpdatadir1, "20190625"), filename='statistic_result', )
     return statistic_df, data_length
 
 
@@ -1151,7 +1151,7 @@ def main_process(process_test=True, win_ratio=0.5, data_sep=10000):
         if os.path.exists(result_filepath):
             #  标记结果合并
             robot_result = pd.DataFrame()
-            current_result_dir = os.path.join(tmpdatadir1, "20190526")
+            current_result_dir = os.path.join(tmpdatadir1, "20190625")
             robot_result_files = [file for file in os.listdir(current_result_dir) if file.startswith("robot_result")]
             if robot_result_files:
                 for file in robot_result_files:
@@ -1187,7 +1187,8 @@ def main_process(process_test=True, win_ratio=0.5, data_sep=10000):
             for file in latest_result_files:
                 shutil.copy2(os.path.join(outdatadir, file), outdatadir1)  # 对最新数据结果做阶段性备份
         sep_bins = list(range(0, unique_startguid_length+data_sep, data_sep))
-        for start_index in range(len(sep_bins)-1):
+        sep_bins_length = len(sep_bins)
+        for start_index in range(sep_bins_length-1):
             chunk_df = mergedata.loc[
                 mergedata.loc[:, 'startguid'].isin(unique_startguid[sep_bins[start_index]:sep_bins[start_index + 1]])]
             chunk_df.reset_index(drop=True, inplace=True)
@@ -1197,10 +1198,12 @@ def main_process(process_test=True, win_ratio=0.5, data_sep=10000):
             chunk_df, data_length = statistic_procedure_v2(chunk_df)  # 前置，统计结果
             if chunk_df.shape[0]:
                 # 生成latest版本统计结果
-                circle_statistic_procedure(chunk_df, os.path.join(tmpdatadir1, '20190526'),
-                                           data_length=data_length, all_data_length=start_index + 1)
-            if start_index % 10 == 0:
-                combine_result_files(os.path.join(tmpdatadir1, '20190526', 'detail_result'))
+                circle_statistic_procedure(chunk_df, os.path.join(tmpdatadir1, '20190625'),
+                                           data_length=data_length, all_data_length=sep_bins[start_index + 1])
+            if start_index % 1000 == 0:
+                combine_result_files(os.path.join(tmpdatadir1, '20190625', 'detail_result'))
+            if start_index == sep_bins_length-1:
+                combine_result_files(os.path.join(tmpdatadir1, '20190625', 'detail_result'))
             # del chunk_df
 
     # 后置，统计数据提取
@@ -1208,6 +1211,6 @@ def main_process(process_test=True, win_ratio=0.5, data_sep=10000):
 
 
 if __name__ == '__main__':
-    # reduce_raw_data()  # 缩减原始数据体积
+    reduce_raw_data()  # 缩减原始数据体积
     # main_process(True, data_sep=4)  # 测试数据
     main_process(process_test=False, win_ratio=0.5, data_sep=1, )
