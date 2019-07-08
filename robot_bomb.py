@@ -215,9 +215,9 @@ def basic_treatment(mergedata):
     mergedata.loc[:, 'cards_init'] = mergedata.loc[:, 'cards_init'].fillna(method='ffill')
     # 整理累积出牌信息
     mergedata.loc[:, 'cum_cards'] = mergedata.loc[:, 'cum_cards'].astype(str)
-    mergedata.loc[:, 'cum_cards'] = mergedata.loc[:, 'cum_cards'].apply(lambda x: set(x[:-1].split(sep=',')))
+    mergedata.loc[:, 'cum_cards'] = mergedata.loc[:, 'cum_cards'].apply(lambda x: set(str(x[:-1]).split(sep=',')))
     # 整理初始牌信息
-    mergedata.loc[:, 'cards_init'] = mergedata.loc[:, 'cards_init'].apply(lambda x: set(x.split(sep=',')))
+    mergedata.loc[:, 'cards_init'] = mergedata.loc[:, 'cards_init'].apply(lambda x: set(str(x).split(sep=',')))
 
     # 计算剩余牌信息 ID组
     mergedata.loc[:, 'leftcards'] = mergedata.apply(lambda row: row['cards_init'] - row['cum_cards'], axis=1)
@@ -1194,7 +1194,7 @@ def main_process(process_test=True, win_ratio=0.5, data_sep=10000):
         #         shutil.copy2(os.path.join(outdatadir, file), outdatadir1)  # 对最新数据结果做阶段性备份
         sep_bins = list(range(0, unique_startguid_length+data_sep, data_sep))
         sep_bins_length = len(sep_bins)
-        for start_index in range(sep_bins_length-1):
+        for start_index in range(0, sep_bins_length-1):
             chunk_df = mergedata.loc[
                 mergedata.loc[:, 'startguid'].isin(unique_startguid[sep_bins[start_index]:sep_bins[start_index + 1]])]
             chunk_df.reset_index(drop=True, inplace=True)
