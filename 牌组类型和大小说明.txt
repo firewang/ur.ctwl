@@ -1,0 +1,15 @@
+1. 牌张大小：牌面值2-A，牌值大小1-13；特殊：级牌40，小王41，大王42
+2. 牌组大小：需要和其他牌组成的牌组，例如顺子钢板连对等，主值是最小的一张牌的值。如果A是最小，特殊处理为0，级牌在这里面忽略其级牌角色；
+	    只有一种大小的牌组，主值是1-13，级牌是40；（王炸的主值是1）
+
+3. 牌的类型  程序用的16进制对应的10进制
+#define     CARD_UNITE_TYPE_SINGLE		0x00000001 //单张                              1
+#define     CARD_UNITE_TYPE_COUPLE		0x00000002 //对子                              2
+#define     CARD_UNITE_TYPE_THREE		0x00000004  //三张                             4
+#define     CARD_UNITE_TYPE_ABT_SINGLE              0x00000040  //顺子                             64
+#define     CARD_UNITE_TYPE_ABT_COUPLE             0x00000100  //连对                            256
+#define     CARD_UNITE_TYPE_ABT_THREE                0x00000200  //钢板                            512
+#define     CARD_UNITE_TYPE_BOMB		0x00001000  //炸弹,4-5张                   4096
+#define     CARD_UNITE_TYPE_TONGHUASHUN        0x00004000  //同花顺                        16384
+#define     CARD_UNITE_TYPE_SUPER_BOMB	0x00008000  //超级大炸弹,6-10张        32768
+#define     CARD_UNITE_TYPE_4KIN                          0x00080000  //4王                              524288
