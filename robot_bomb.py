@@ -1,5 +1,5 @@
 # -*- encoding: utf-8 -*-
-# @Version : 2.1
+# @Version : 3
 # @Time    : 2019/6/5 14:05
 # @Time    : 2019/7/3 13:46
 # @Author  : wanghd
@@ -15,11 +15,7 @@ from collections import Counter
 import numpy as np
 import pandas as pd
 import subprocess
-
-# import profile
-# import dask.dataframe as dd
-# import win32api
-# import win32con
+from itertools import compress
 
 
 def first_init():
@@ -40,7 +36,7 @@ def first_init():
     outdatadir1 = os.path.join(os.getcwd(), 'outdata1')
 
 
-def write_data(df, filedir=os.path.join(os.getcwd(), 'tmpdatadir1'), filename='robot_bomb', index=False):
+def write_data(df, filedir=os.path.join(os.getcwd(), 'tmpdata1'), filename='robot_bomb', index=False):
     if not os.path.exists(filedir):
         os.mkdir(filedir)
     current_time = time.strftime('%Y%m%d%H%M%S', time.localtime())
@@ -78,6 +74,7 @@ def get_raw_test_data(generate=False, startguid_list=None):
         # 牌型type，出牌回合, 出牌信息id[0-107]，出牌数字信息[1,14]
         # ['startguid', 'uid', 'starttime_unix', 'playtime_unix', 'type', 'cards_order', 'cards', 'num']
         show = pd.read_csv(os.path.join(rawdatadir1, 'show_test.csv'), encoding='gbk')
+        show.rename(columns={"num": "num_show"}, inplace=True)
         cus['cards_order'] = 1
         mergedata = pd.merge(show, cus, on=['startguid', 'uid', 'cards_order'], how='left', copy=False)
         return mergedata
@@ -86,24 +83,25 @@ def get_raw_test_data(generate=False, startguid_list=None):
 def get_raw_data(win_ratio=0.5):
     """读取正式数据"""
     # cus_usecols = ['startguid', 'uid', 'cards', 'num','rank'] 起手牌牌id[0-107], 起手牌牌数字[1-14]
-    cus_usecols = ['startguid', 'uid', 'cards', 'rank', 'label_uid']  # 起手牌，级牌，胜率大于要求的用户uid标记
+    cus_usecols = ['startguid', 'uid', 'cards', 'rank', 'label_uid', 'num']  # 起手牌，级牌，胜率大于要求的用户uid标记
     cus_files = [file for file in os.listdir(rawdatadir) if
-                 file.startswith(f'short_win_ratio_{win_ratio}_customization_20190625')]
+                 file.startswith(f'short_win_ratio_{win_ratio}_customization_20190709')]
     print(cus_files)
     name_dict = {'cards': "cards_init", 'num': 'num_init'}  # 重命名为 初始牌组
 
     # 对局id,uid, 开局时间，每手出牌时间点，出牌状态（出，不出，托管）'optype',
     # 牌型type，出牌回合, 出牌信息id[0-107]，出牌数字信息[1,14]
     # ['startguid', 'uid', 'starttime_unix', 'playtime_unix', 'type', 'cards_order', 'cards', 'num']
-    show_usecols = ['startguid', 'uid', 'starttime_unix', 'playtime_unix', 'type', 'cards_order', 'cards']
+    show_usecols = ['startguid', 'uid', 'starttime_unix', 'playtime_unix', 'type', 'cards_order', 'cards', 'num']
     show_files = [file for file in os.listdir(rawdatadir) if
-                  file.startswith(f'short_win_ratio_{win_ratio}_showcards_20190625')]
+                  file.startswith(f'short_win_ratio_{win_ratio}_showcards_20190709')]
     print(show_files)
     for cus_file, show_file in zip(cus_files, show_files):
         cus = pd.read_csv(os.path.join(rawdatadir, cus_file), usecols=cus_usecols, encoding='gbk')  # 读取定制信息
         cus.rename(columns=name_dict, inplace=True)  # 重命名为初始牌组
         cus['cards_order'] = 1  # 起手牌标记出牌回合为 1
         show = pd.read_csv(os.path.join(rawdatadir, show_file), usecols=show_usecols, encoding='gbk')  # 读取出牌信息
+        show.rename(columns={"num": "num_show"}, inplace=True)
 
         # 将初始牌组 和 出牌信息合并
         show = pd.merge(show, cus, on=['startguid', 'uid', 'cards_order'], how='left', copy=False)
@@ -115,14 +113,14 @@ def reduce_raw_data(win_ratio=0.5):
     """缩减原始数据体积，仅保存需要的列， 用户胜率大于等于50%"""
     first_init()
     # 缩减customization 定制表体积
-    cus_usecols = ['startguid', 'uid', 'cards', 'rank']  # 起手牌,级牌
-    cus_files = [file for file in os.listdir(rawdatadir) if file.startswith('customization_20190625')]
+    cus_usecols = ['startguid', 'uid', 'cards', 'rank', 'num']  # 起手牌,级牌，起手牌牌面信息
+    cus_files = [file for file in os.listdir(rawdatadir) if file.startswith('customization_20190709')]
     # 缩减showcards 出牌信息表体积
-    show_usecols = ['startguid', 'uid', 'starttime_unix', 'playtime_unix', 'type', 'cards_order', 'cards']
-    show_files = [file for file in os.listdir(rawdatadir) if file.startswith('showcards_20190625')]
+    show_usecols = ['startguid', 'uid', 'starttime_unix', 'playtime_unix', 'type', 'cards_order', 'cards', 'num']
+    show_files = [file for file in os.listdir(rawdatadir) if file.startswith('showcards_20190709')]
     # 缩减start开局表，有历史对局战绩信息
     start_usecols = ['uid', 'win', 'loss']  # 历史胜局数，历史输局数
-    start_files = [file for file in os.listdir(rawdatadir) if file.startswith('start_20190625')]
+    start_files = [file for file in os.listdir(rawdatadir) if file.startswith('start_20190709')]
 
     for start_file, cus_file, show_file in zip(start_files, cus_files, show_files):
         start = pd.read_csv(os.path.join(rawdatadir, start_file), usecols=start_usecols, encoding='gbk')
@@ -145,6 +143,25 @@ def reduce_raw_data(win_ratio=0.5):
         # show = pd.merge(show, start, on='uid', how='left', copy=False) # cus和show一处标记label_uid
         # show.loc[:, 'label_uid'] = show.loc[:, 'label_uid'].fillna(0)  # cus和show一处标记label_uid
         show.to_csv(os.path.join(rawdatadir, f"short_win_ratio_{win_ratio}_{show_file}"), index=False, encoding='gbk')
+
+
+def card_id2card_num(card_id):
+    """将牌ID值 转化为 牌面值"""
+    temp_list = []
+    for card in card_id:
+        card54id = int(card) % 54
+        if card54id < 52:
+            if card54id % 13 < 12:
+                layindex = card54id % 13 + 2
+            else:
+                layindex = 1
+        elif card54id == 52:
+            layindex = 13
+        else:
+            layindex = 14
+
+        temp_list.append(layindex)
+    return sorted(temp_list)
 
 
 def basic_treatment(mergedata):
@@ -213,6 +230,7 @@ def basic_treatment(mergedata):
     # 构建每一回合的剩余牌信息：ID组
     # 填充初始牌信息
     mergedata.loc[:, 'cards_init'] = mergedata.loc[:, 'cards_init'].fillna(method='ffill')
+    mergedata.loc[:, 'num_init'] = mergedata.loc[:, 'num_init'].fillna(method='ffill')  # 初始牌牌面信息
     # 整理累积出牌信息
     mergedata.loc[:, 'cum_cards'] = mergedata.loc[:, 'cum_cards'].astype(str)
     mergedata.loc[:, 'cum_cards'] = mergedata.loc[:, 'cum_cards'].apply(lambda x: set(str(x[:-1]).split(sep=',')))
@@ -221,23 +239,20 @@ def basic_treatment(mergedata):
 
     # 计算剩余牌信息 ID组
     mergedata.loc[:, 'leftcards'] = mergedata.apply(lambda row: row['cards_init'] - row['cum_cards'], axis=1)
+    mergedata.loc[:, 'leftcards_face'] = mergedata.loc[:, 'leftcards'].apply(card_id2card_num)  # 剩余牌牌面信息
     # 剩余牌数量
     mergedata.loc[:, 'leftcards_nums'] = mergedata.loc[:, 'leftcards'].apply(lambda x: len(x))
     mergedata.loc[:, 'leftcards_str'] = mergedata.loc[:, 'leftcards'].apply(lambda x: "".join(sorted(list(x))))
     mergedata.drop(columns=['cum_cards'], inplace=True)  # 删除累积出牌信息
 
-    # 标记局第一手
-    mergedata.loc[:, 'first_hand'] = mergedata.apply(
-        lambda row: 1 if row['seat_order'] == 1 and row['cards_order'] == 1 else 0, axis=1)
-
-    # write_data(mergedata, filename='robot')
+    # write_data(mergedata, filename='robot_basic')
 
     return mergedata
 
 
 def calculate_lead_cards_value(df):
     """调用拆牌程序取 出牌 的牌值"""
-    base_path = "F:/CardsValue"
+    base_path = os.path.abspath("F:/CardsValue")
     input_file = os.path.join(base_path, 'Input.txt')
     if os.path.exists(input_file):
         os.remove(input_file)
@@ -295,7 +310,7 @@ def calculate_lead_cards_value(df):
 
 def calculate_cards_value(df):
     """调用拆牌程序拆解剩余手牌"""
-    base_path = "F:/CardsValue"
+    base_path = os.path.abspath("F:/CardsValue")
     input_file = os.path.join(base_path, 'Input.txt')
     if os.path.exists(input_file):
         os.remove(input_file)
@@ -328,26 +343,30 @@ def calculate_cards_value(df):
     subprocess.call(os.path.join(base_path, 'CalculatorCardsValue3.exe'))
 
     # 读取拆牌信息
-    df_cardsvalue_cols = ['leftcards_str', 'cards_value', 'cards_type']
+    df_cardsvalue_cols = ['leftcards_str', 'cards_value', 'cards_id', 'cards_type']  # 唯一标识，牌力值，ID组，类型组
     # 加速读取速度
     df_cardsvalue = pd.read_csv(output_file, header=None, names=["result_abd"])
-    df_cardsvalue.dropna(inplace=True)
     if df_cardsvalue.shape[0] % 4 == 0:
         df_cardsvalue.loc[:, "mark"] = df_cardsvalue.index // 4  # 验证结果数目
         df_cardsvalue = df_cardsvalue.groupby('mark').apply(lambda x: x.T)  # 转置分组后的 series，mark列会变成行
         df_cardsvalue = df_cardsvalue.loc[(slice(None), "result_abd"), :].reset_index(drop=True)  # 筛出结果，去除mark行
-        df_cardsvalue.drop(columns=list(df_cardsvalue.columns)[-2], inplace=True)  # 删除结果中ID组列
-        df_cardsvalue.columns = ['leftcards_str', 'cards_value', 'cards_type']
+        # df_cardsvalue.drop(columns=list(df_cardsvalue.columns)[-2], inplace=True)  # 删除结果中ID组列
+        df_cardsvalue.columns = df_cardsvalue_cols
+        df_cardsvalue.loc[:, 'cards_type'] = df_cardsvalue.loc[:, 'cards_type'].apply(
+            lambda x: str(x).replace("-", "|"))
     else:
         df_cardsvalue = pd.DataFrame(columns=df_cardsvalue_cols)
         # 不满足结果数目的情况，使用 readline 保证完整记录可被记录
         with open(output_file, 'r') as fout:
             out = fout.readlines()
+            out = eval(str(out).replace('-', '|'))
             for index, line in enumerate(out, start=1):
                 if index % 5 == 1:
                     df_cardsvalue.at[index - 1, 'leftcards_str'] = line.strip()
                 if index % 5 == 3:
                     df_cardsvalue.at[index - 3, 'cards_value'] = line.strip()
+                if index % 5 == 4:
+                    df_cardsvalue.at[index - 4, 'cards_id'] = line.strip()
                 if index % 5 == 0:
                     df_cardsvalue.at[index - 5, 'cards_type'] = line.strip()
                 # print(index, line)
@@ -360,11 +379,11 @@ def calculate_cards_value(df):
     df.drop(columns=["leftcards_str"], inplace=True)  # 删除合并标识列 leftcards_str
 
     df = calculate_lead_cards_value(df)  # 出牌牌值计算
-    df = apart_cards_type(df)  # 牌型拆解
+    df = apart_cards_type(df)  # 牌型拆解, 牌型信息标记
     df = rival_leadcards_treatment(df)  # 提取对手出牌，各出牌情况标记，对手剩余牌
 
     # 存储拆牌后的数据
-    write_data(df, filedir=os.path.join(tmpdatadir1, '20190625'), filename='robot_result')
+    write_data(df, filedir=os.path.join(tmpdatadir1, '20190709'), filename='robot_result')
 
     return df
 
@@ -376,6 +395,7 @@ def apart_cards_type(df):
     :return: 各牌型数量，剩余手牌中各牌型的最大牌值，
     """
 
+    # 单，对，三，顺，连对，钢板，炸45，同花，超炸6-10,4王
     cardoptypelist = [1, 2, 4, 64, 256, 512, 4096, 16384, 32768, 524288]
 
     def apart_card(x):
@@ -385,9 +405,9 @@ def apart_cards_type(df):
         # cardoptypelist = [1, 2, 4, 64, 256, 512, 4096, 16384, 32768, 524288]
         cards_list = str(x).split(sep='||')
         if 'nan' not in cards_list:
-            card_optype_list = [card.split(sep='-')[0] for card in cards_list]  # 牌类型
-            # card_nums_list = [card.split(sep='-')[1] for card in cards_list]  # 牌数量
-            card_value_list = [card.split(sep='-')[2] for card in cards_list]  # 牌值
+            card_optype_list = [card.split(sep='|')[0] for card in cards_list]  # 牌类型
+            # card_nums_list = [card.split(sep='|')[1] for card in cards_list]  # 牌数量
+            card_value_list = [card.split(sep='|')[2] for card in cards_list]  # 牌值
             # 取各牌型数量
             optype_counter = Counter(card_optype_list)
             # 各牌型数量列名—— 用于之后分列 作为列名
@@ -425,6 +445,23 @@ def apart_cards_type(df):
     df = pd.concat([df, df_apart], axis=1)
     df.drop(columns=['apartcol'], inplace=True)
 
+    def get_leftcards_exclude(row):
+        """获得除炸弹顺子外剩余手牌ID组"""
+        paixing_list = str(row["cards_type"]).split(sep='||')
+        leftcards_exclude = '0'
+        if 'nan' not in paixing_list:
+            card_optype_list = [card.split(sep='|')[0] for card in paixing_list]  # 牌类型
+            boolen = [card_type in ["1", '2', '4', '256', '512'] for card_type in card_optype_list]
+            if sum(boolen) > 0:
+                card_id_list = str(row["cards_id"]).split(sep='||')
+                leftcards_exclude_list = compress(card_id_list, boolen)  # 筛选出非炸非顺子手牌
+                leftcards_exclude = ",".join(
+                    [cards_id for cards in leftcards_exclude_list for cards_id in cards.split(sep="|")])
+        return leftcards_exclude
+
+    # 产生剩余手牌中除炸除顺子外牌ID组
+    df.loc[:, "leftcards_exclude"] = df.apply(get_leftcards_exclude, axis=1)
+
     # 统计剩余手牌的信息
     #  1.剩余最大炸类型，2.剩余最大炸 牌数，3.剩余炸弹数,4 非炸弹手数：出完牌的手数,5 非炸牌型平均牌值
     result_cols = ["leftmaxbomb", 'leftmaxbomb_cardnum', 'leftbomb_nums', 'Nonebomb_lefthands',
@@ -443,7 +480,7 @@ def apart_cards_type(df):
         cards_list = str(x).split(sep='||')  # ['1-1-8','2-2-10'],
         for card in cards_list:
             if 'nan' not in card:
-                card_type, card_num, card_value = card.split(sep='-')
+                card_type, card_num, card_value = card.split(sep='|')
                 if card_type in ['4096', '16384', '32768', '524288']:
                     bomb_list.append((card_type, card_num, card_value))
                 else:
@@ -519,8 +556,6 @@ def rival_leadcards_treatment(df):
         if inhand_bomb_max_type > compare_df.at[compare_idx, 'type']:
             compare_df.at[compare_idx + plus_idx, 'lead_bomb'] = 1  # 标记对手出炸
             compare_df.at[compare_idx + plus_idx, 'need_bomb'] = 1  # 需要出炸
-            if compare_df.at[compare_idx, "first_hand"] > 0:
-                compare_df.at[compare_idx + plus_idx, 'lead_firsthand_bomb'] = 1  # 标记为开局出炸
             if compare_df.at[compare_idx + plus_idx, 'type'] > 0:
                 compare_df.at[compare_idx + plus_idx, 'label_bomb'] = 1  # 出炸
         # 类型相同比牌数
@@ -529,8 +564,6 @@ def rival_leadcards_treatment(df):
             if compare_df.at[compare_idx + plus_idx, 'leftmaxbomb_cardnum'] > bomb_card_nums:
                 compare_df.at[compare_idx + plus_idx, 'lead_bomb'] = 1  # 标记对手出炸
                 compare_df.at[compare_idx + plus_idx, 'need_bomb'] = 1  # 需要出炸
-                if compare_df.at[compare_idx, "first_hand"] > 0:
-                    compare_df.at[compare_idx + plus_idx, 'lead_firsthand_bomb'] = 1  # 标记为开局出炸
                 if compare_df.at[compare_idx + plus_idx, 'type'] > 0:
                     compare_df.at[compare_idx + plus_idx, 'label_bomb'] = 1  # 出炸
             # 牌数相同比牌值
@@ -538,29 +571,39 @@ def rival_leadcards_treatment(df):
                 if inhand_bomb_max_cardvalue > int(compare_df.at[compare_idx, 'leadcards_cardvalue']):
                     compare_df.at[compare_idx + plus_idx, 'lead_bomb'] = 1  # 标记对手出炸
                     compare_df.at[compare_idx + plus_idx, 'need_bomb'] = 1  # 需要出炸
-                    if compare_df.at[compare_idx, "first_hand"] > 0:
-                        compare_df.at[compare_idx + plus_idx, 'lead_firsthand_bomb'] = 1  # 标记为开局出炸
                     if compare_df.at[compare_idx + plus_idx, 'type'] > 0:
                         compare_df.at[compare_idx + plus_idx, 'label_bomb'] = 1  # 出炸
         return compare_df
 
     for start_guid in start_guids:
+        # TODO 增加标记出牌对手位置rival_position (1 上家， 0 下家)
+        # TODO 增加对手出牌信息rival_leadcards_（出牌类型 type，出牌ID组 cards，出牌牌面组 num_show）
+        # TODO 增加对手的剩余牌牌力值 rival_cards_value
+        # TODO 需要出炸--判断出牌牌型按牌力值拆解方案是否存在可压的牌型，如果不可压（包括没有）
+        # TODO 判断除炸除顺子之外剩余牌 是否可压，无论可压与否都要标记， 在统计类型时根据出牌类型和可压标记重组命名
         gamedf = df.loc[df.loc[:, 'startguid'] == start_guid]
         gamedf = gamedf.sort_values(by=["playtime_unix"], ascending=True)  # 根据出牌顺序排序
         gamedf.reset_index(drop=True, inplace=True)
-        gamedf.loc[:, 'lead_firsthand_bomb'] = 0  # 局第一手炸弹
-        gamedf.loc[:, 'lead_bomb'] = 0  # 出炸
-        gamedf.loc[:, 'lead_max_optype1'] = 0  # 最大单张
-        gamedf.loc[:, 'lead_max_optype2'] = 0  # 最大对子
-        gamedf.loc[:, 'lead_max_optype4'] = 0  # 最大三张
-        gamedf.loc[:, 'lead_max_optype32'] = 0  # 最大三带二
-        gamedf.loc[:, 'lead_max_optype256'] = 0  # 连对
-        gamedf.loc[:, 'lead_max_optype512'] = 0  # 钢板
-        gamedf.loc[:, 'lead_max_optype64'] = 0  # 顺子
+        # 对手出牌信息
+        gamedf.loc[:, 'rival_leadcards_type'] = 0  # 出牌的类型
+        gamedf.loc[:, 'rival_leadcards_cards'] = 0  # 出牌的ID组
+        gamedf.loc[:, 'rival_leadcards_num_show'] = 0  # 出牌的牌面信息
+        # gamedf.loc[:, 'lead_bomb'] = 0  # 出炸
+        # gamedf.loc[:, 'lead_max_optype1'] = 0  # 最大单张
+        # gamedf.loc[:, 'lead_max_optype2'] = 0  # 最大对子
+        # gamedf.loc[:, 'lead_max_optype4'] = 0  # 最大三张
+        # gamedf.loc[:, 'lead_max_optype32'] = 0  # 最大三带二
+        # gamedf.loc[:, 'lead_max_optype256'] = 0  # 连对
+        # gamedf.loc[:, 'lead_max_optype512'] = 0  # 钢板
+        # gamedf.loc[:, 'lead_max_optype64'] = 0  # 顺子
         gamedf.loc[:, 'optype12432'] = 0  # 单张，对子，三张，三带二压不住
         gamedf.loc[:, 'optype25651264'] = 0  # 连对，钢板，顺子压不住
+        #  是否需要出炸，及出炸情况的标记
         gamedf.loc[:, 'need_bomb'] = 2  # 是否需要出炸 0非1是2其他情况
         gamedf.loc[:, 'label_bomb'] = 0  # 是否出炸
+        # 对手信息：出完牌后剩余的牌力值
+        df.loc[:, "rival_cards_value"] = 9999  # 可能为正好最后一手牌，因此令默认值为9999
+        df.loc[:, "rival_position"] = 1  # 对手位置 ，1 上家，0 下家   默认取上家，因为上家是主要情况
         # 取队友剩余牌
         gamedf.loc[:, "leftcards_nums_pair"] = gamedf.loc[:, 'leftcards_nums'].shift(-2).shift(4)
         gamedf.at[0, "leftcards_nums_pair"] = 27
@@ -574,6 +617,7 @@ def rival_leadcards_treatment(df):
         rival_df = gamedf.loc[:, ['playtime_unix', 'leftcards_nums', 'type']]
         rival_df.loc[:, 'rival_leftcards_nums'] = 28  # 出牌对手的剩余牌数量 , 28表示无需记录
         rival_df.loc[:, 'rival_leftcards_nums_pair'] = 28  # 出牌对手队友的剩余牌数量， 28表示无需记录
+
         # 局第一手
         rival_df.at[1, 'rival_leftcards_nums'] = rival_df.at[0, 'leftcards_nums']
         rival_df.at[1, 'rival_leftcards_nums_pair'] = 27
@@ -889,7 +933,7 @@ def rival_leadcards_treatment(df):
                             gamedf.at[idx + 1, 'label_bomb'] = 1  # 出炸
 
         gamedf_cols = ['playtime_unix', "leftcards_nums_pair", 'rival_leftcards_nums', 'rival_leftcards_nums_pair',
-                       'need_bomb', 'label_bomb', 'lead_firsthand_bomb', 'lead_bomb', 'lead_max_optype1',
+                       'need_bomb', 'label_bomb', 'lead_bomb', 'lead_max_optype1',
                        'lead_max_optype2', 'lead_max_optype4', 'lead_max_optype32', 'lead_max_optype256',
                        'lead_max_optype512', 'lead_max_optype64', 'optype12432', 'optype25651264']
         gamedf = gamedf.loc[:, gamedf_cols]
@@ -1051,7 +1095,7 @@ def statistic_procedure_v2(df):
             if row["occurrence_times"] != 0 else 0, axis=1)
 
         # 存储统计结果
-        write_data(statistic_df, filedir=os.path.join(tmpdatadir1, "20190625"), filename='statistic_result', )
+        write_data(statistic_df, filedir=os.path.join(tmpdatadir1, "20190709"), filename='statistic_result', )
     return statistic_df, data_length
 
 
@@ -1139,15 +1183,15 @@ def circle_statistic_procedure(df, filepath, data_length, all_data_length):
 def main_process(process_test=True, win_ratio=0.5, data_sep=10000):
     first_init()   # 初始化配置
     if process_test:
-        get_raw_test_data(True,
-                          ["81_17743_3_1558830025_4",
-                           '81_18149_48_1558830417_4',
-                           '81_8136_60_1558830808_4',
-                           '81_10163_4_1558830693_4',
-                           '81_18149_13_1558811750_4',
-                           '81_18149_13_1558811183_4',
-                           '81_17743_42_1558834539_4',
-                           '81_17743_42_1558833612_4'])  # 生成测试数据
+        # get_raw_test_data(True,
+        #                   ["81_10163_0_1562633295_4",
+        #                    '81_10163_0_1562640783_4',
+        #                    '81_8136_0_1562602103_4',
+        #                    '81_8136_0_1562602871_4',
+        #                    '81_18148_0_1562603113_4',
+        #                    '81_18148_0_1562605573_4',
+        #                    '81_19015_0_1562602841_4',
+        #                    '81_21040_0_1562603449_4'])  # 生成测试数据
         mergedata = get_raw_test_data()  # 读取测试数据
 
     else:
@@ -1157,7 +1201,7 @@ def main_process(process_test=True, win_ratio=0.5, data_sep=10000):
         if os.path.exists(result_filepath):
             #  标记结果合并
             robot_result = pd.DataFrame()
-            current_result_dir = os.path.join(tmpdatadir1, "20190625")
+            current_result_dir = os.path.join(tmpdatadir1, "20190709")
             robot_result_files = [file for file in os.listdir(current_result_dir) if file.startswith("robot_result")]
             if robot_result_files:
                 for file in robot_result_files:
@@ -1204,12 +1248,12 @@ def main_process(process_test=True, win_ratio=0.5, data_sep=10000):
             chunk_df, data_length = statistic_procedure_v2(chunk_df)  # 前置，统计结果
             if chunk_df.shape[0]:
                 # 生成latest版本统计结果
-                circle_statistic_procedure(chunk_df, os.path.join(tmpdatadir1, '20190625'),
+                circle_statistic_procedure(chunk_df, os.path.join(tmpdatadir1, '20190709'),
                                            data_length=data_length, all_data_length=sep_bins[start_index + 1])
             if start_index % 1000 == 0:
-                combine_result_files(os.path.join(tmpdatadir1, '20190625', 'detail_result'))
+                combine_result_files(os.path.join(tmpdatadir1, '20190709', 'detail_result'))
             if start_index == sep_bins_length-1:
-                combine_result_files(os.path.join(tmpdatadir1, '20190625', 'detail_result'))
+                combine_result_files(os.path.join(tmpdatadir1, '20190709', 'detail_result'))
             # del chunk_df
 
     # 后置，统计数据提取
@@ -1217,6 +1261,6 @@ def main_process(process_test=True, win_ratio=0.5, data_sep=10000):
 
 
 if __name__ == '__main__':
-    reduce_raw_data()  # 缩减原始数据体积
-    # main_process(True, data_sep=4)  # 测试数据
-    main_process(process_test=False, win_ratio=0.5, data_sep=1, )
+    # reduce_raw_data()  # 缩减原始数据体积
+    main_process(True, data_sep=100)  # 测试数据
+    # main_process(process_test=False, win_ratio=0.5, data_sep=1, )
