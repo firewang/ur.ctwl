@@ -10,6 +10,7 @@ import os
 # import shutil
 import sys
 import time
+import configparser
 from collections import Counter
 
 import numpy as np
@@ -108,6 +109,14 @@ def get_raw_data(win_ratio=0.5):
         del cus
         return show
 
+
+def get_config_dict(filepath, filename, section_name):
+    """读取配置文件中的字典"""
+    config = configparser.ConfigParser()
+    config.read(os.path.join(filepath, filename))
+    config_dict = dict(config.items(section_name))
+    # print(config_dict)
+    return config_dict
 
 def reduce_raw_data(win_ratio=0.5):
     """缩减原始数据体积，仅保存需要的列， 用户胜率大于等于50%"""
@@ -284,7 +293,7 @@ def calculate_lead_cards_value(df):
 
     # del df_tmp  # 删除仅包含出牌的df_tmp
     # 执行 CalculatorCardsValue.exe 获得拆牌信息
-    subprocess.call(os.path.join(base_path, 'CalculatorCardsValue3.exe'))
+    subprocess.call(os.path.join(base_path, 'CalculatorCardsValue1dir.exe'))
 
     # 读取拆牌信息
     df_cardsvalue = pd.DataFrame(columns=['leadcards_str', 'leadcards_cardvalue'])
@@ -340,7 +349,7 @@ def calculate_cards_value(df):
                 previous_card = df.at[rowid, 'leftcards_str']
 
     # 执行 CalculatorCardsValue.exe 获得拆牌信息
-    subprocess.call(os.path.join(base_path, 'CalculatorCardsValue3.exe'))
+    subprocess.call(os.path.join(base_path, 'CalculatorCardsValue1dir.exe'))
 
     # 读取拆牌信息
     df_cardsvalue_cols = ['leftcards_str', 'cards_value', 'cards_id', 'cards_type']  # 唯一标识，牌力值，ID组，类型组
@@ -383,6 +392,7 @@ def calculate_cards_value(df):
     df = rival_leadcards_treatment(df)  # 提取对手出牌，各出牌情况标记，对手剩余牌
 
     # 存储拆牌后的数据
+    # df.rename(columns=get_config_dict(os.getcwd(), 'robot_bomb_colnames.cfg', 'colname'), inplace=True)
     write_data(df, filedir=os.path.join(tmpdatadir1, '20190709'), filename='robot_result')
 
     return df
@@ -530,8 +540,8 @@ def apart_cards_type(df):
 def rival_leadcards_treatment(df):
     """提取需要的统计数据的基础数据"""
     # 循环处理每一局
-    df.loc[:, 'cards'] = df.loc[:, 'cards'].fillna("0")
-    df.loc[:, 'num_show'] = df.loc[:, 'num_show'].fillna('0')
+    df.loc[:, 'cards'] = df.loc[:, 'cards'].fillna("0")  # 手牌ID组
+    df.loc[:, 'num_show'] = df.loc[:, 'num_show'].fillna('0')  # 手牌牌面
     df.loc[:, "cards_value"] = df.loc[:, "cards_value"].fillna(0)  # 剩余牌牌力值
     df.sort_values(by=["startguid", 'playtime_unix'], ascending=[True, True])
     df = df.reset_index(drop=True)
@@ -549,8 +559,6 @@ def rival_leadcards_treatment(df):
         # 判断炸弹类型大小
         # 比类型
         if inhand_bomb_max_type > compare_df.at[compare_idx, 'type']:
-            # TODO 需要修改 lead_bomb的标记 （删除）
-            compare_df.at[compare_idx + plus_idx, 'lead_bomb'] = 1  # 标记对手出炸
             compare_df.at[compare_idx + plus_idx, 'need_bomb'] = 1  # 需要出炸
             if compare_df.at[compare_idx + plus_idx, 'type'] > 0:
                 compare_df.at[compare_idx + plus_idx, 'label_bomb'] = 1  # 出炸
@@ -558,14 +566,12 @@ def rival_leadcards_treatment(df):
         elif inhand_bomb_max_type == compare_df.at[compare_idx, 'type']:
             bomb_card_nums = len(str(compare_df.at[compare_idx, 'cards']).split(","))  # 出牌炸弹的牌数
             if compare_df.at[compare_idx + plus_idx, 'leftmaxbomb_cardnum'] > bomb_card_nums:
-                compare_df.at[compare_idx + plus_idx, 'lead_bomb'] = 1  # 标记对手出炸
                 compare_df.at[compare_idx + plus_idx, 'need_bomb'] = 1  # 需要出炸
                 if compare_df.at[compare_idx + plus_idx, 'type'] > 0:
                     compare_df.at[compare_idx + plus_idx, 'label_bomb'] = 1  # 出炸
             # 牌数相同比牌值
             elif compare_df.at[compare_idx + plus_idx, 'leftmaxbomb_cardnum'] == bomb_card_nums:
                 if inhand_bomb_max_cardvalue > int(compare_df.at[compare_idx, 'leadcards_cardvalue']):
-                    compare_df.at[compare_idx + plus_idx, 'lead_bomb'] = 1  # 标记对手出炸
                     compare_df.at[compare_idx + plus_idx, 'need_bomb'] = 1  # 需要出炸
                     if compare_df.at[compare_idx + plus_idx, 'type'] > 0:
                         compare_df.at[compare_idx + plus_idx, 'label_bomb'] = 1  # 出炸
@@ -593,11 +599,15 @@ def rival_leadcards_treatment(df):
 
     def compare_leftcards_exclude(source_df, source_idx, plus_idx):
         # 对手出牌信息
-        leadcards_cardvalue = source_df.at[source_idx, "leadcards_cardvalue"]  # 对手出牌牌值
-        leadcards_type = source_df.at[source_idx, 'type']  # 对手出牌类型  -- 需要牌的种类数type_kinds,各类的数量type_nums
+        leadcards_cardvalue = int(source_df.at[source_idx, "leadcards_cardvalue"])  # 对手出牌牌值
+        leadcards_type = source_df.at[source_idx, 'type']  # 对手出牌类型
 
         # 除炸除顺子外剩余手牌
         leftcards_exclude = set(str(source_df.at[source_idx+plus_idx, 'leftcards_exclude']).split(","))
+        if len(leftcards_exclude) > 0:
+            leftcards_exclude_face = Counter(card_id2card_num(leftcards_exclude))  # 牌面
+        else:
+            leftcards_exclude_face = Counter([0])
 
         # rank列记录到级牌ID的偏移量
         jipai_id_offset = [-1, 12, 25, 38, 53, 66, 79, 92]
@@ -622,12 +632,12 @@ def rival_leadcards_treatment(df):
                 # 出级牌 或者 小王
                 if sum([x > (leadcards_cardvalue - 27) for x in paimian]) > 0:
                     # 是否存在牌面大于出牌牌面的数值
-                    source_df.at[source_idx + plus_idx, 'need_bomb111'] = 0  # 可压
+                    source_df.at[source_idx + plus_idx, 'need_bomb'] = 0  # 可压
             else:
                 # 对于非级牌的牌，牌面就是牌值+1 ； 此时判断是否存在比牌面值大的牌或者有级牌
                 if (sum([x > (leadcards_cardvalue + 1) for x in paimian]) > 0) or (jipai_nums > 0):
                     # 是否存在牌面大于出牌牌面的数值
-                    source_df.at[source_idx + plus_idx, 'need_bomb111'] = 0  # 可压
+                    source_df.at[source_idx + plus_idx, 'need_bomb'] = 0  # 可压
         elif leadcards_type in [2]:
             # 出对子的情况
             if leadcards_cardvalue in [40, 41, 42]:
@@ -635,14 +645,14 @@ def rival_leadcards_treatment(df):
                 bool_list = [x > (leadcards_cardvalue - 27) for x in paimian]
                 if sum(bool_list) > 0 and sum([x > 1 for x in compress(paimian_nums, bool_list)]) > 0:
                     # 是否存在牌面大于出牌牌面的数值
-                    source_df.at[source_idx + plus_idx, 'need_bomb111'] = 0  # 可压
+                    source_df.at[source_idx + plus_idx, 'need_bomb'] = 0  # 可压
             elif leadcards_cardvalue in [13]:
                 # 出A
                 bool_list = [x > leadcards_cardvalue for x in paimian]
                 if (sum(bool_list) > 0 and sum(
                         [x > 1 for x in compress(paimian_nums, bool_list)]) > 0) or (jipai_nums > 1):
                     # 出小王,大王, 或者级牌
-                    source_df.at[source_idx + plus_idx, 'need_bomb111'] = 0  # 可压
+                    source_df.at[source_idx + plus_idx, 'need_bomb'] = 0  # 可压
             else:
                 # 对于出牌为 非级牌，非王，非A 的牌
                 if jipai_heart_nums < 1:
@@ -651,13 +661,13 @@ def rival_leadcards_treatment(df):
                     if (sum(bool_list) > 0 and sum(
                             [x > 1 for x in compress(paimian_nums, bool_list)]) > 0) or (jipai_nums > 1):
                         # 是否存在牌面大于出牌牌面的数值
-                        source_df.at[source_idx + plus_idx, 'need_bomb111'] = 0  # 可压
+                        source_df.at[source_idx + plus_idx, 'need_bomb'] = 0  # 可压
                 else:
                     # 存在红桃级牌
                     bool_list = [x > (leadcards_cardvalue + 1) for x in paimian]
                     if (sum(bool_list) > 0) or (jipai_nums > 1):
                         # 是否存在牌面大于出牌牌面的数值
-                        source_df.at[source_idx + plus_idx, 'need_bomb111'] = 0  # 可压
+                        source_df.at[source_idx + plus_idx, 'need_bomb'] = 0  # 可压
         elif leadcards_type in [4]:
             # 出三张的情况
             if leadcards_cardvalue in [40, 41, 42]:
@@ -666,8 +676,8 @@ def rival_leadcards_treatment(df):
             elif leadcards_cardvalue in [13]:
                 # 出A
                 if jipai_nums > 2:
-                    # 出级牌
-                    source_df.at[source_idx + plus_idx, 'need_bomb111'] = 0  # 可压
+                    # 压级牌
+                    source_df.at[source_idx + plus_idx, 'need_bomb'] = 0  # 可压
             else:
                 # 对于出牌为 非级牌，非王，非A 的牌
                 if jipai_heart_nums < 1:
@@ -675,52 +685,133 @@ def rival_leadcards_treatment(df):
                     bool_list = [x > (leadcards_cardvalue + 1) for x in paimian]
                     if (sum(bool_list) > 0 and sum(
                             [x > 2 for x in compress(paimian_nums, bool_list)]) > 0) or (jipai_nums > 2):
-                        # 是否存在牌面大于出牌牌面的数值
-                        source_df.at[source_idx + plus_idx, 'need_bomb111'] = 0  # 可压
+                        # 大三张 或者 3级牌
+                        source_df.at[source_idx + plus_idx, 'need_bomb'] = 0  # 可压
                 elif jipai_heart_nums < 2:
                     # 存在 1 张红桃级牌
                     bool_list = [x > (leadcards_cardvalue + 1) for x in paimian]
                     if (sum(bool_list) > 0 and sum(
                             [x > 1 for x in compress(paimian_nums, bool_list)]) > 0) or (jipai_nums > 2):
-                        # 是否存在牌面大于出牌牌面的数值
-                        source_df.at[source_idx + plus_idx, 'need_bomb111'] = 0  # 可压
+                        # 大对子配1红桃级牌 或 3级牌
+                        source_df.at[source_idx + plus_idx, 'need_bomb'] = 0  # 可压
                 else:
                     # 存在 2 张红桃级牌
                     bool_list = [x > (leadcards_cardvalue + 1) for x in paimian]
                     if (sum(bool_list) > 0 and sum(
                             [x > 0 for x in compress(paimian_nums, bool_list)]) > 0) or (jipai_nums > 2):
-                        # 是否存在牌面大于出牌牌面的数值
-                        source_df.at[source_idx + plus_idx, 'need_bomb111'] = 0  # 可压
-
+                        # 大单配2红桃级牌 或 3级牌
+                        source_df.at[source_idx + plus_idx, 'need_bomb'] = 0  # 可压
+                    elif sum(bool_list) > 0 and sum(
+                            [x > 1 for x in compress(paimian_nums, bool_list)]) > 0:
+                        # 大对子配1红桃级牌
+                        source_df.at[source_idx + plus_idx, 'need_bomb'] = 0  # 可压
+        elif leadcard_type in [32]:
+            if int(source_df.at[source_idx, 'leadcards_cardvalue']) >= int(
+                    source_df.at[source_idx + plus_idx, 'optype4_maxcardvalue']):
+                # 三张压不住的情况
+                if leadcards_cardvalue in [40, 41, 42]:
+                    # 出级牌 或者 小王，大王
+                    source_df.at[source_idx + plus_idx, 'need_bomb'] = 1
+                elif leadcards_cardvalue in [13]:
+                    if (jipai_nums > 2) and (len([x > 1 for x in paimian_nums]) > 0):
+                        # 出级牌 + 其他对子
+                        source_df.at[source_idx + plus_idx, 'need_bomb'] = 0  # 可压
+                    else:
+                        source_df.at[source_idx + plus_idx, 'need_bomb'] = 1  # 不可压
+                else:
+                    # 对于出牌为 非级牌，非A 的牌
+                    if jipai_heart_nums < 1:
+                        # 不存在红桃级牌
+                        bool_list = [x > (leadcards_cardvalue + 1) for x in paimian]
+                        if (sum(bool_list) > 0 and sum(
+                                [x > 2 for x in compress(paimian_nums, bool_list)]) > 0) and (
+                                len([(k, v) for k, v in leftcards_exclude_face.items() if v > 1]) > 1):
+                            # 是否存在牌面大于出牌牌面的数值, 并且有对子
+                            source_df.at[source_idx + plus_idx, 'need_bomb'] = 0  # 可压
+                        elif (jipai_nums > 2) and (len([(k, v) for k, v in leftcards_exclude_face.items() if v > 1]) > 1):
+                            source_df.at[source_idx + plus_idx, 'need_bomb'] = 0  # 可压
+                        else:
+                            source_df.at[source_idx + plus_idx, 'need_bomb'] = 1  # 不可压
+                    elif jipai_heart_nums < 2:
+                        # 存在 1 张红桃级牌
+                        bool_list = [x > (leadcards_cardvalue + 1) for x in paimian]
+                        if (sum(bool_list) > 0 and sum(
+                                [x > 1 for x in compress(paimian_nums, bool_list)]) > 0) and (
+                                (len([(k, v) for k, v in leftcards_exclude_jipai_face.items() if v > 1]) > 1) or (
+                                jipai_nums > 2)):
+                            # 非级牌牌面+红桃级牌=三张  配 其他对子或者级牌对子
+                            source_df.at[source_idx + plus_idx, 'need_bomb'] = 0  # 可压
+                        elif (jipai_nums > 2) and (
+                                len([(k, v) for k, v in leftcards_exclude_jipai_face.items() if v > 1]) > 1):
+                            # 三张级牌 + 其他对子
+                            source_df.at[source_idx + plus_idx, 'need_bomb'] = 0  # 可压
+                        elif (jipai_nums > 3) and (
+                                len([(k, v) for k, v in leftcards_exclude_face.items() if v > 1]) > 0):
+                            # 三张级牌 + 单牌配红桃级牌
+                            source_df.at[source_idx + plus_idx, 'need_bomb'] = 0  # 可压
+                        else:
+                            source_df.at[source_idx + plus_idx, 'need_bomb'] = 1  # 不可压
+                    else:
+                        # 存在 2 张红桃级牌
+                        bool_list = [x > (leadcards_cardvalue + 1) for x in paimian]
+                        if (sum(bool_list) > 0 and sum(
+                                [x > 0 for x in compress(paimian_nums, bool_list)]) > 0) and (
+                                (len([(k, v) for k, v in leftcards_exclude_jipai_face.items() if v > 1]) > 1) or (
+                                jipai_nums > 3)):
+                            # 大单配2红桃级牌 + 其他对子或2级牌
+                            source_df.at[source_idx + plus_idx, 'need_bomb'] = 0  # 可压
+                        elif (sum(bool_list) > 0 and sum(
+                                [x > 1 for x in compress(paimian_nums, bool_list)]) > 0) and (
+                                (len([(k, v) for k, v in leftcards_exclude_jipai_face.items() if v > 0]) > 1) or (
+                                jipai_nums > 2)):
+                            # 大对子配1红桃级牌 + 其他单牌配1红桃级牌 或 2级牌
+                            source_df.at[source_idx + plus_idx, 'need_bomb'] = 0  # 可压
+                        elif (jipai_nums > 2) and (
+                                len([(k, v) for k, v in leftcards_exclude_jipai_face.items() if v > 1]) > 0):
+                            # 3级牌 + 1对子
+                            source_df.at[source_idx + plus_idx, 'need_bomb'] = 0  # 可压
+                        elif (jipai_nums > 3) and (
+                                len([(k, v) for k, v in leftcards_exclude_jipai_face.items() if v > 0]) > 0):
+                            # 3 级牌 + 单配1红桃级牌
+                            source_df.at[source_idx + plus_idx, 'need_bomb'] = 0  # 可压
+                        else:
+                            source_df.at[source_idx + plus_idx, 'need_bomb'] = 1  # 不可压
+            else:
+                # 三张压的住，但是没有对子
+                if (int(source_df.at[source_idx + plus_idx, 'optype2_nums']) < 1) and (
+                        source_df.at[source_idx + plus_idx, 'leftbomb_nums'] > 0):
+                    if len([(k, v) for k, v in leftcards_exclude_face.items() if v > 1]) > 1:
+                        # 剩余手牌中大于等于2张的牌面种类数 ，多于1 可压，否则不可压(三张压的住的时候红桃级牌不变牌)
+                        source_df.at[source_idx + plus_idx, 'need_bomb'] = 0
+                    else:
+                        source_df.at[source_idx + plus_idx, 'need_bomb'] = 1
+            # 所有情况都需要判断最终是否出了炸
+            if source_df.at[source_idx + plus_idx, 'type'] >= 4096:
+                source_df.at[source_idx + plus_idx, 'label_bomb'] = 1  # 出炸
         return source_df
 
-    def compare_cards(type_df, source_idx, plus_idx, stage=False):
+    def compare_cards(type_df, type_card, source_idx, plus_idx, stage=False):
         """
         :param type_df: 源df
+        :param type_card: 出牌牌型
         :param source_idx: 出牌方 index
         :param plus_idx: 己方相对出牌方的index offset
         :param stage: 是否需要继续判断除炸除顺子外剩余牌是否可压
         :return:
         """
-        type_card = type_df.at[source_idx, 'type']
         type_card_col = f"optype{type_card}_maxcardvalue"  # 当前对手出牌牌型，在我手中的最大牌值
         if int(type_df.at[source_idx, 'leadcards_cardvalue']) >= int(type_df.at[source_idx + plus_idx, type_card_col]):
-            # 牌力值单牌压不住的情况
+            # 牌力值牌型压不住的情况
             if type_df.at[source_idx + plus_idx, 'leftbomb_nums'] > 0:
-                type_df.at[source_idx + plus_idx, 'need_bomb111'] = 1
+                type_df.at[source_idx + plus_idx, 'need_bomb'] = 1
                 if stage:
                     # 判断剩余牌是否可压
                     type_df = compare_leftcards_exclude(type_df, source_idx, plus_idx)
-                    # type_df.at[source_idx + plus_idx, 'optype12432'] = 1  # 单张，对子，三张，三带二压不住
                     if type_df.at[source_idx + plus_idx, 'type'] >= 4096:
                         type_df.at[source_idx + plus_idx, 'label_bomb'] = 1  # 出炸
-                    # elif type_df.at[source_idx + plus_idx, 'type'] > 0:
-                    #     type_df.at[source_idx + plus_idx, 'label_bomb'] = 0  # 非出炸，压了其他牌
                 else:
                     if type_df.at[source_idx + plus_idx, 'type'] >= 4096:
                         type_df.at[source_idx + plus_idx, 'label_bomb'] = 1  # 出炸
-        # 临时标记对手出牌牌型
-        type_df.at[source_idx + plus_idx, 'rival_leadcards_type111'] = type_df.at[source_idx, 'type']
         return type_df
 
     for start_guid in start_guids:
@@ -729,23 +820,11 @@ def rival_leadcards_treatment(df):
         gamedf.reset_index(drop=True, inplace=True)
         # 对手出牌信息
         gamedf.loc[:, 'rival_leadcards_type'] = 0  # 出牌的类型
-        gamedf.loc[:, 'rival_leadcards_type111'] = 0  # 出牌的类型，临时标记对手出牌类型
         gamedf.loc[:, 'rival_leadcards_cards'] = '0'  # 出牌的ID组
         gamedf.loc[:, 'rival_leadcards_num_show'] = '0'  # 出牌的牌面信息
-        # gamedf.loc[:, 'lead_bomb'] = 0  # 出炸
-        # gamedf.loc[:, 'lead_max_optype1'] = 0  # 最大单张
-        # gamedf.loc[:, 'lead_max_optype2'] = 0  # 最大对子
-        # gamedf.loc[:, 'lead_max_optype4'] = 0  # 最大三张
-        # gamedf.loc[:, 'lead_max_optype32'] = 0  # 最大三带二
-        # gamedf.loc[:, 'lead_max_optype256'] = 0  # 连对
-        # gamedf.loc[:, 'lead_max_optype512'] = 0  # 钢板
-        # gamedf.loc[:, 'lead_max_optype64'] = 0  # 顺子
-        # gamedf.loc[:, 'optype12432'] = 0  # 单张，对子，三张，三带二压不住
-        # gamedf.loc[:, 'optype25651264'] = 0  # 连对，钢板，顺子压不住
         #  是否需要出炸，及出炸情况的标记
-        gamedf.loc[:, 'need_bomb'] = 2  # 是否需要出炸 0非1是2其他情况
         # 是否需要出炸,1是（牌型压不住，剩余牌重组压不住）0否 （牌型压不住，剩余牌重组压的住） 2其他情况
-        gamedf.loc[:, 'need_bomb111'] = 2  # 临时标记，如果没问题，则替换原 need_bomb
+        gamedf.loc[:, 'need_bomb'] = 2
         gamedf.loc[:, 'label_bomb'] = 0  # 是否出炸
         # 对手信息：出完牌后剩余的牌力值,位置，
         gamedf.loc[:, "rival_cards_value"] = 9999  # 可能为正好最后一手牌，因此令默认值为9999
@@ -782,97 +861,54 @@ def rival_leadcards_treatment(df):
             if gamedf.at[idx, 'type'] > 0:
                 gamedf = get_rival_info(gamedf, info_idx=idx, plus_idx=1, game_start=False)
 
-        # TODO 统计标记 三带二判断是否需要出炸以及是否可压
         # 出牌对手出牌的统计标记
         for idx in range(idx_length - 3):
-            if gamedf.at[idx, 'type'] in [4096, 16384, 32768, 524288]:
+            leadcard_type = gamedf.at[idx, 'type']  # 出牌类型
+            if leadcard_type in [4096, 16384, 32768, 524288]:
                 # 对手出炸弹
                 gamedf = compare_bomb(gamedf, idx, 1)
                 if gamedf.at[idx+1, 'type'] == 0 and gamedf.at[idx+2, 'type'] == 0:
                     # 第二位，不出，不出 的情况
                     gamedf = compare_bomb(gamedf, idx, 3)
 
-            elif gamedf.at[idx, 'type'] in [1, 2, 4]:
+            elif leadcard_type in [1, 2, 4]:
                 # 对手出单张, 对子，三张
-                gamedf = compare_cards(gamedf, source_idx=idx, plus_idx=1, stage=True)
+                gamedf = compare_cards(gamedf, type_card=leadcard_type, source_idx=idx, plus_idx=1, stage=True)
                 if gamedf.at[idx + 1, 'type'] == 0 and gamedf.at[idx + 2, 'type'] == 0:
                     # 第二位队友(下家)的情况（不出，不出）
-                    gamedf = compare_cards(gamedf, source_idx=idx, plus_idx=3, stage=True)
-            elif gamedf.at[idx, 'type'] in [64, 256, 512]:
+                    gamedf = compare_cards(gamedf, type_card=leadcard_type,  source_idx=idx, plus_idx=3, stage=True)
+            elif leadcard_type in [64, 256, 512]:
                 # 顺子，连对，钢板
-                gamedf = compare_cards(gamedf, source_idx=idx, plus_idx=1, stage=False)
+                gamedf = compare_cards(gamedf, type_card=leadcard_type, source_idx=idx, plus_idx=1, stage=False)
                 if gamedf.at[idx + 1, 'type'] == 0 and gamedf.at[idx + 2, 'type'] == 0:
                     # 第二位队友(下家)的情况（不出，不出）
-                    gamedf = compare_cards(gamedf, source_idx=idx, plus_idx=3, stage=False)
-            elif gamedf.at[idx, 'type'] in [32]:
-                # 出三带二
-                if int(gamedf.at[idx, 'leadcards_cardvalue']) >= int(gamedf.at[idx + 1, 'optype4_maxcardvalue']):
-                    # 三张压不住的情况, 包含出牌为最大三张的情况
-                    if gamedf.at[idx + 1, 'leftbomb_nums'] > 0:
-                        gamedf.at[idx + 1, 'need_bomb'] = 1
-                        gamedf.at[idx + 1, 'optype12432'] = 1  # 单张，对子，三张，三带二压不住
-                        if gamedf.at[idx + 1, 'type'] > 0:
-                            gamedf.at[idx + 1, 'label_bomb'] = 1  # 出炸
-                else:
-                    # 三张压的住，但是没有对子
-                    if int(gamedf.at[idx+1, 'optype2_nums']) < 1 and gamedf.at[idx + 1, 'leftbomb_nums'] > 0:
-                        gamedf.at[idx + 1, 'need_bomb'] = 1
-                        gamedf.loc[idx + 1, 'lead_max_optype32'] = 1
-                        gamedf.at[idx + 1, 'optype12432'] = 1  # 单张，对子，三张，三带二压不住
-                        if gamedf.at[idx + 1, 'type'] > 0:
-                            gamedf.at[idx + 1, 'label_bomb'] = 1  # 出炸
+                    gamedf = compare_cards(gamedf, type_card=leadcard_type, source_idx=idx, plus_idx=3, stage=False)
+            elif leadcard_type in [32]:
+                # 出三带二，上家
+                gamedf = compare_leftcards_exclude(gamedf, source_idx=idx, plus_idx=1)
                 if gamedf.at[idx + 1, 'type'] == 0 and gamedf.at[idx + 2, 'type'] == 0:
-                    # 第二位队友的情况（不出，不出），压不住包含出牌为最大三张的情况
-                    if int(gamedf.at[idx, 'leadcards_cardvalue']) >= int(gamedf.at[idx + 3, 'optype4_maxcardvalue']):
-                        # 三张压不住的情况
-                        if gamedf.at[idx + 3, 'leftbomb_nums'] > 0:
-                            gamedf.at[idx + 3, 'need_bomb'] = 1
-                            gamedf.at[idx + 3, 'optype12432'] = 1  # 单张，对子，三张，三带二压不住
-                            if gamedf.at[idx + 3, 'type'] > 0:
-                                gamedf.at[idx + 3, 'label_bomb'] = 1  # 出炸
-                else:
-                    # 三张压的住，但是没有对子
-                    if int(gamedf.at[idx+3, 'optype2_nums']) < 1 and gamedf.at[idx + 3, 'leftbomb_nums'] > 0:
-                        gamedf.at[idx + 3, 'need_bomb'] = 1
-                        gamedf.loc[idx + 3, 'lead_max_optype32'] = 1
-                        gamedf.at[idx + 3, 'optype12432'] = 1  # 单张，对子，三张，三带二压不住
-                        if gamedf.at[idx + 3, 'type'] > 0:
-                            gamedf.at[idx + 3, 'label_bomb'] = 1  # 出炸
+                    # 第二位队友（下家）的情况（不出，不出）
+                    gamedf = compare_leftcards_exclude(gamedf, source_idx=idx, plus_idx=3)
 
         for idx in range(idx_length-3, idx_length-1):
             # 倒数第三手和倒数第二手的情况
-            if gamedf.at[idx, 'type'] in [4096, 16384, 32768, 524288]:
+            leadcard_type = gamedf.at[idx, 'type']
+            if leadcard_type in [4096, 16384, 32768, 524288]:
                 # 对手出炸弹
                 gamedf = compare_bomb(gamedf, idx, 1)
-            elif gamedf.at[idx, 'type'] in [1, 2, 4]:
+            elif leadcard_type in [1, 2, 4]:
                 # 对手出单张, 对子，三张
-                gamedf = compare_cards(gamedf, source_idx=idx, plus_idx=1, stage=True)
-            elif gamedf.at[idx, 'type'] in [64, 256, 512]:
+                gamedf = compare_cards(gamedf, type_card=leadcard_type, source_idx=idx, plus_idx=1, stage=True)
+            elif leadcard_type in [64, 256, 512]:
                 # 顺子，连对，钢板
-                gamedf = compare_cards(gamedf, source_idx=idx, plus_idx=1, stage=False)
+                gamedf = compare_cards(gamedf, type_card=leadcard_type, source_idx=idx, plus_idx=1, stage=False)
             elif gamedf.at[idx, 'type'] in [32]:
                 # 出三带二
-                if int(gamedf.at[idx, 'leadcards_cardvalue']) >= int(gamedf.at[idx + 1, 'optype4_maxcardvalue']):
-                    # 三张压不住的情况, 包含出牌为最大三张的情况
-                    if gamedf.at[idx + 1, 'leftbomb_nums'] > 0:
-                        gamedf.at[idx + 1, 'need_bomb'] = 1
-                        gamedf.at[idx + 1, 'optype12432'] = 1  # 单张，对子，三张，三带二压不住
-                        if gamedf.at[idx + 1, 'type'] > 0:
-                            gamedf.at[idx + 1, 'label_bomb'] = 1  # 出炸
-                else:
-                    # 三张压的住，但是没有对子
-                    if int(gamedf.at[idx+1, 'optype2_nums']) < 1 and gamedf.at[idx + 1, 'leftbomb_nums'] > 0:
-                        gamedf.at[idx + 1, 'need_bomb'] = 1
-                        gamedf.loc[idx + 1, 'lead_max_optype32'] = 1
-                        gamedf.at[idx + 1, 'optype12432'] = 1  # 单张，对子，三张，三带二压不住
-                        if gamedf.at[idx + 1, 'type'] > 0:
-                            gamedf.at[idx + 1, 'label_bomb'] = 1  # 出炸
+                gamedf = compare_leftcards_exclude(gamedf, source_idx=idx, plus_idx=1)
 
         gamedf_cols = ['playtime_unix', "leftcards_nums_pair", 'rival_leftcards_nums', 'rival_leftcards_nums_pair',
                        "rival_cards_value", "rival_position", 'rival_leadcards_type', 'rival_leadcards_cards',
-                       'rival_leadcards_num_show', 'need_bomb', 'label_bomb', 'lead_bomb', 'lead_max_optype1',
-                       'lead_max_optype2', 'lead_max_optype4', 'lead_max_optype32', 'lead_max_optype256',
-                       'lead_max_optype512', 'lead_max_optype64', 'optype12432', 'optype25651264']
+                       'rival_leadcards_num_show', 'need_bomb', 'label_bomb', ]
 
         gamedf = gamedf.loc[:, gamedf_cols]
         # gamedf.drop(columns=['seat_order', 'leftcards_nums', 'startguid', 'uid', ], inplace=True)
@@ -968,17 +1004,20 @@ def statistic_procedure_v2(df):
 
     # 对手出牌情况
     def calculate_lead_cards(row):
-        if int(row["lead_bomb"]) == 1:
-            return 1  # 出炸
-        elif int(row["lead_max_optype1"]) == 1:
-            return 2  # "最大单张"
-        elif int(row["lead_max_optype512"]) == 1:
-            return 3  # "钢板"
-        elif int(row["lead_max_optype256"]) == 1 or int(row["lead_max_optype64"]) == 1:
-            return 4  # "连对or顺子"
-        elif int(row["lead_max_optype2"]) == 1 or int(row["lead_max_optype4"]) == 1 or int(
-                row["lead_max_optype32"]) == 1:
-            return 5  # 最大对子，三张，三带二
+        if int(row["rival_leadcards_type"]) == 1 and row["need_bomb"] == 1:
+            return 1  # 单张不可压
+        elif int(row["rival_leadcards_type"]) == 1 and row["need_bomb"] == 0:
+            return 2  # 单张可压
+        elif int(row["rival_leadcards_type"]) >= 4096:
+            return 3  # 出炸
+        elif int(row["rival_leadcards_type"]) == 512:
+            return 4  # "钢板"
+        elif (int(row["rival_leadcards_type"]) in [256, 64]):
+            return 5  # "连对or顺子"
+        elif (int(row["rival_leadcards_type"]) in [2, 4, 32]) and (row["need_bomb"] == 0):
+            return 6  # 对子，三张，三带二 可压
+        elif (int(row["rival_leadcards_type"]) in [2, 4, 32]) and (row["need_bomb"] == 1):
+            return 7  # 对子，三张，三带二 不可压
         else:
             return 0  # 其他情况
 
@@ -998,7 +1037,7 @@ def statistic_procedure_v2(df):
     used_cols = ["startguid", 'rival_leftcards_nums', 'rival_leftcards_nums_pair', 'leftcards_nums_pair',
                  'leftbomb_nums', 'Nonebomb_lefthands', 'lead_cards', 'need_bomb', 'label_bomb']
     statistic_df = df.loc[
-        (df.loc[:, 'need_bomb'] == 1) & (df.loc[:, 'lead_cards'] > 0) & (df.loc[:, 'label_uid'] > 0),
+        (df.loc[:, 'need_bomb'] < 2) & (df.loc[:, 'lead_cards'] > 0) & (df.loc[:, 'label_uid'] > 0),
         used_cols]
     statistic_df.reset_index(drop=True, inplace=True)
     data_length = statistic_df.startguid.nunique()
@@ -1006,12 +1045,12 @@ def statistic_procedure_v2(df):
         statistic_df.loc[:, 'need_bomb'] = statistic_df.loc[:, 'need_bomb'].astype(int)
         statistic_df.loc[:, 'label_bomb'] = statistic_df.loc[:, 'label_bomb'].astype(int)
         statistic_df = statistic_df.groupby(used_cols[:-2]).agg({
-            'need_bomb': np.sum,
+            'need_bomb': pd.Series.count,
             'label_bomb': np.sum,
         })
         statistic_df.reset_index(drop=False, inplace=True)
         statistic_df.loc[:, "lead_cards"] = statistic_df.loc[:, 'lead_cards'].astype(str)
-        lead_cards_name_dict = {"1": "出炸", "2": "最大单张", "3": "钢板", "4": "连对或顺子", "5": "最大对子、三张、三带二"}
+        lead_cards_name_dict = get_config_dict(os.getcwd(), 'robot_bomb_colnames.cfg', 'lead_cards_name_dict')
         statistic_df.loc[:, "lead_cards"] = statistic_df.loc[:, 'lead_cards'].map(lead_cards_name_dict)
 
         robot_bomb_statistic_situations = {
@@ -1200,5 +1239,6 @@ def main_process(process_test=True, win_ratio=0.5, data_sep=10000):
 
 if __name__ == '__main__':
     # reduce_raw_data()  # 缩减原始数据体积
-    main_process(True, data_sep=100)  # 测试数据
-    # main_process(process_test=False, win_ratio=0.5, data_sep=1, )
+    # main_process(True, data_sep=1)  # 测试数据
+    main_process(process_test=False, win_ratio=0.5, data_sep=1, )
+
