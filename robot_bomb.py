@@ -1,7 +1,8 @@
 # -*- encoding: utf-8 -*-
 # @Version : 3
-# @Time    : 2019/6/5 14:05
-# @Time    : 2019/7/3 13:46
+# @Time    : 2019/6/5 14:05 V1
+# @Time    : 2019/7/3 13:46 V2
+# @Time    : 2019/7/24 16:05 V3 拆牌、压牌逻辑变更
 # @Author  : wanghd
 # @note    : 用户牌局出炸情况处理（拆牌+ 统计）
 
@@ -117,6 +118,7 @@ def get_config_dict(filepath, filename, section_name):
     config_dict = dict(config.items(section_name))
     # print(config_dict)
     return config_dict
+
 
 def reduce_raw_data(win_ratio=0.5):
     """缩减原始数据体积，仅保存需要的列， 用户胜率大于等于50%"""
@@ -728,7 +730,8 @@ def rival_leadcards_treatment(df):
                                 len([(k, v) for k, v in leftcards_exclude_face.items() if v > 1]) > 1):
                             # 是否存在牌面大于出牌牌面的数值, 并且有对子
                             source_df.at[source_idx + plus_idx, 'need_bomb'] = 0  # 可压
-                        elif (jipai_nums > 2) and (len([(k, v) for k, v in leftcards_exclude_face.items() if v > 1]) > 1):
+                        elif (jipai_nums > 2) and (
+                                len([(k, v) for k, v in leftcards_exclude_face.items() if v > 1]) > 1):
                             source_df.at[source_idx + plus_idx, 'need_bomb'] = 0  # 可压
                         else:
                             source_df.at[source_idx + plus_idx, 'need_bomb'] = 1  # 不可压
@@ -1012,7 +1015,7 @@ def statistic_procedure_v2(df):
             return 3  # 出炸
         elif int(row["rival_leadcards_type"]) == 512:
             return 4  # "钢板"
-        elif (int(row["rival_leadcards_type"]) in [256, 64]):
+        elif int(row["rival_leadcards_type"]) in [256, 64]:
             return 5  # "连对or顺子"
         elif (int(row["rival_leadcards_type"]) in [2, 4, 32]) and (row["need_bomb"] == 0):
             return 6  # 对子，三张，三带二 可压
@@ -1241,4 +1244,3 @@ if __name__ == '__main__':
     # reduce_raw_data()  # 缩减原始数据体积
     # main_process(True, data_sep=1)  # 测试数据
     main_process(process_test=False, win_ratio=0.5, data_sep=1, )
-
