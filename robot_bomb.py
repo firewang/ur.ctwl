@@ -1036,9 +1036,14 @@ def statistic_procedure_v2(df):
     df.loc[:, 'startguid'] = df.loc[:, 'startguid'].apply(lambda x: x.split("_")[1])
     df.loc[:, 'startguid'] = df.loc[:, 'startguid'].apply(room_sep)
 
+    # 处理出牌对手位置
+    rival_position_dict = {'1': '上家', '0': '下家'}
+    df.loc[:, "rival_position"] = df.loc[:, "rival_position"].astype(str)
+    df.loc[:, "rival_position"] = df.loc[:, "rival_position"].map(rival_position_dict)
+
     # 筛选数据进行统计
     used_cols = ["startguid", 'rival_leftcards_nums', 'rival_leftcards_nums_pair', 'leftcards_nums_pair',
-                 'leftbomb_nums', 'Nonebomb_lefthands', 'lead_cards', 'need_bomb', 'label_bomb']
+                 'leftbomb_nums', 'Nonebomb_lefthands', 'lead_cards', 'rival_position', 'need_bomb', 'label_bomb']
     statistic_df = df.loc[
         (df.loc[:, 'need_bomb'] < 2) & (df.loc[:, 'lead_cards'] > 0) & (df.loc[:, 'label_uid'] > 0),
         used_cols]
@@ -1064,6 +1069,7 @@ def statistic_procedure_v2(df):
             "leftcards_nums_pair": "队友剩余手牌数",
             "rival_leftcards_nums_pair": "出牌对手队友剩余手牌数",
             "rival_leftcards_nums": "出牌对手剩余手牌数",
+            'rival_position': "出牌对手位置",
             "need_bomb": "occurrence_times",
             "label_bomb": "lead_bomb_times",
             'startguid': "房间号",
