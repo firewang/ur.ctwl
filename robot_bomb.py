@@ -160,18 +160,19 @@ def card_id2card_num(card_id):
     """将牌ID值 转化为 牌面值"""
     temp_list = []
     for card in card_id:
-        card54id = int(card) % 54
-        if card54id < 52:
-            if card54id % 13 < 12:
-                layindex = card54id % 13 + 2
+        try:
+            card54id = int(card) % 54
+            if card54id < 52:
+                if card54id % 13 < 12:
+                    temp_list.append(card54id % 13 + 2)
+                else:
+                    temp_list.append(1)
+            elif card54id == 52:
+                temp_list.append(14)  # 小王
             else:
-                layindex = 1
-        elif card54id == 52:
-            layindex = 14  # 小王
-        else:
-            layindex = 15  # 牌ID 对应 牌面中 大王也是14，这里特殊处理
-
-        temp_list.append(layindex)
+                temp_list.append(15)  # 牌ID 对应 牌面中 大王也是14，这里特殊处理
+        except ValueError:
+            temp_list.append(-1)  # 应对可能的空值
     return sorted(temp_list)
 
 
@@ -613,7 +614,10 @@ def rival_leadcards_treatment(df):
 
         # rank列记录到级牌ID的偏移量
         jipai_id_offset = [-1, 12, 25, 38, 53, 66, 79, 92]
-        jipai_rank = int(source_df.at[source_idx, 'rank'])
+        try:
+            jipai_rank = int(source_df.at[source_idx, 'rank'])
+        except ValueError:
+            jipai_rank = 1  # 如果缺失，默认级牌为 2 （ID=1）
         jipai_id = {str(jipai_rank + offset) for offset in jipai_id_offset}  # 级牌ID
         jipai_heart_id = {str(jipai_rank + 25), str(jipai_rank + 79)}  # 红桃级牌ID
 
