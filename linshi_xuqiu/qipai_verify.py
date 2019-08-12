@@ -121,9 +121,13 @@ if __name__ == '__main__':
             robot_result.drop_duplicates(inplace=True)
             robot_result = robot_result.reset_index(drop=True)
             robot_result = robot_result.query("leftcards_nums == 27").reset_index(drop=True)
+            # 筛选经典场 - 8136 经典初级  - 10321  经典中级  - 10163  经典高级 - 18934  经典大师
+            classic_rooms = ["8136", '10321', '10163', "18934"]
+            robot_result.loc[:, 'room'] = robot_result.startguid.apply(lambda x: x.split('_')[1])
+            robot_result = robot_result.loc[robot_result.loc[:, 'room'].isin(classic_rooms)].reset_index(drop=True)
             if robot_result.shape[0]:
                 df = pd.concat([robot_result, df])
-        if df.shape[0] > 1000:
+        if df.shape[0] > 10000:
             df.drop_duplicates(inplace=True)
             df = df.reset_index(drop=True)
             break
