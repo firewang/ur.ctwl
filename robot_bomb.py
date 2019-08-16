@@ -1,8 +1,9 @@
 # -*- encoding: utf-8 -*-
-# @Version : 3
+# @Version : 4
 # @Time    : 2019/6/5 14:05 V1
 # @Time    : 2019/7/3 13:46 V2
 # @Time    : 2019/7/24 16:05 V3 拆牌、压牌逻辑变更
+# @Time    : 2019/8/16 11:15 V4 修复对局日志选手跑完牌后无记录，导致选手错位，以致统计标记错误的问题
 # @Author  : wanghd
 # @note    : 用户牌局出炸情况处理（拆牌+ 统计）
 
@@ -18,7 +19,7 @@ import numpy as np
 import pandas as pd
 import subprocess
 from itertools import compress
-
+from tqdm import tqdm
 
 def first_init():
     """初始化基础配置"""
@@ -121,7 +122,7 @@ def get_config_dict(filepath, filename, section_name):
 
 
 def reduce_raw_data(win_ratio=0.5):
-    """缩减原始数据体积，仅保存需要的列， 用户胜率大于等于50%"""
+    """缩减原始数据体积，仅保存需要的列， 筛选存在用户胜率大于等于50%的对局"""
     first_init()
     # 缩减customization 定制表体积
     cus_usecols = ['startguid', 'uid', 'cards', 'rank', 'num']  # 起手牌,级牌，起手牌牌面信息
@@ -823,8 +824,42 @@ def rival_leadcards_treatment(df):
 
     for start_guid in start_guids:
         gamedf = df.loc[df.loc[:, 'startguid'] == start_guid]
-        gamedf = gamedf.sort_values(by=["playtime_unix"], ascending=True)  # 根据出牌顺序排序
+        cards_order_df = pd.DataFrame(list(range(1, gamedf.cards_order.max()+1)), columns=["cards_order"])
+        cards_order_df.loc[:, 'startguid'] = start_guid
+        cards_order_seat_order = gamedf.loc[:, ['startguid', 'uid', 'seat_order', "playtime_unix"]].sort_values(by=["playtime_unix"], ascending=True)
+        cards_order_seat_order = cards_order_seat_order.groupby(["startguid"]).head(4)
+        cards_order_seat_order.drop(columns=["playtime_unix"], inplace=True)
+        cards_order_df = pd.merge(cards_order_df, cards_order_seat_order, on=['startguid'], how='left')
+
+        # TODO
+        # cards_order_df.to_excel(f"F:/aaa/cards_order_df.xlsx", index=False)
+
+        # print(cards_order_df.head())
+        gamedf.drop(columns=["seat_order"], inplace=True)  # 删除原始的seat_order
+        gamedf = pd.merge(gamedf, cards_order_df, on=["startguid", 'cards_order', 'uid'], how='right')
+
+        # TODO
+        # gamedf.to_excel(f"F:/aaa/gamedf.xlsx", index=False)
+
+        gamedf = gamedf.sort_values(by=['uid', 'cards_order'], ascending=[True, True])
         gamedf.reset_index(drop=True, inplace=True)
+        # 填充由于填补 cards_order 导致的缺失值
+        for col in ["cards", 'num_show', 'leftcards_exclude','cards_id','cards_type','leftcards_exclude']:
+            gamedf.loc[:, col] = gamedf.loc[:, col].fillna('0')
+        for col in ['starttime_unix', "playtime_unix", 'rank', 'cards_init', 'num_init', 'label_uid', 'leftcards',
+                    'leftcards_face']:
+            gamedf.loc[:, col] = gamedf.loc[:, col].fillna(method='ffill')
+        # 剩余的其他数值列: type【主要】, 剩余牌数，各牌型数量，其他选手牌数等
+        # gamedf.loc[:, 'type'] = gamedf.loc[:, "type"].fillna(0)
+        for col in gamedf.columns:
+            gamedf.loc[:, col] = gamedf.loc[:, col].fillna(0)
+
+        # TODO
+        # gamedf.to_excel(f"F:/aaa/gamedf_ffill.xlsx", index=False)
+
+        gamedf = gamedf.sort_values(by=['cards_order', 'seat_order'], ascending=[True, True])  # 根据出牌顺序排序
+        gamedf.reset_index(drop=True, inplace=True)
+
         # 对手出牌信息
         gamedf.loc[:, 'rival_leadcards_type'] = 0  # 出牌的类型
         gamedf.loc[:, 'rival_leadcards_cards'] = '0'  # 出牌的ID组
@@ -844,6 +879,9 @@ def rival_leadcards_treatment(df):
         gamedf.at[1, "leftcards_nums_pair"] = 27
         gamedf.at[2, "leftcards_nums_pair"] = gamedf.at[0, 'leftcards_nums']
         gamedf.at[3, "leftcards_nums_pair"] = gamedf.at[1, 'leftcards_nums']
+
+        # TODO
+        # gamedf.to_excel(f"F:/aaa/gamedf_nums_pair.xlsx", index=False)
 
         idx_length = gamedf.shape[0]
         gamedf.loc[:, 'type'] = gamedf.loc[:, 'type'].astype(int)
@@ -913,16 +951,22 @@ def rival_leadcards_treatment(df):
                 # 出三带二
                 gamedf = compare_leftcards_exclude(gamedf, source_idx=idx, plus_idx=1)
 
-        gamedf_cols = ['playtime_unix', "leftcards_nums_pair", 'rival_leftcards_nums', 'rival_leftcards_nums_pair',
+        gamedf_cols = ['startguid', 'uid', 'cards_order', 'playtime_unix', "leftcards_nums_pair",
+                       'rival_leftcards_nums', 'rival_leftcards_nums_pair',
                        "rival_cards_value", "rival_position", 'rival_leadcards_type', 'rival_leadcards_cards',
                        'rival_leadcards_num_show', 'need_bomb', 'label_bomb', ]
 
         gamedf = gamedf.loc[:, gamedf_cols]
         # gamedf.drop(columns=['seat_order', 'leftcards_nums', 'startguid', 'uid', ], inplace=True)
         statistic_df = statistic_df.append(gamedf, sort=False, ignore_index=True)  # concat会匹配index,ignore_index
+        # TODO
+        # statistic_df.to_excel(f"F:/aaa/gamedf_statistic.xlsx", index=False)
 
     # df = pd.concat([df, statistic_df], axis=1) # 按顺序匹配总是可能存在index的问题
-    df = pd.merge(df, statistic_df, on='playtime_unix', copy=False)  # 根据出牌时间来匹配队友剩余牌数
+    # dd = pd.merge(df, statistic_df, on='playtime_unix', copy=False)  # 根据出牌时间来匹配队友剩余牌数
+    # dd.to_excel(f"F:/aaa/gamedf_merge_playtime.xlsx", index=False)
+    df = pd.merge(df, statistic_df, on=['startguid','uid','cards_order'], copy=False)  # 根据匹配队友剩余牌数
+    # df.to_excel(f"F:/aaa/gamedf_merge_cards_order.xlsx", index=False)
     return df
 
 
@@ -1251,6 +1295,29 @@ def main_process(process_test=True, win_ratio=0.5, data_sep=10000):
 
 
 if __name__ == '__main__':
-    # reduce_raw_data()  # 缩减原始数据体积
+    reduce_raw_data()  # 缩减原始数据体积
     # main_process(True, data_sep=1)  # 测试数据
     main_process(process_test=False, win_ratio=0.5, data_sep=1, )
+
+    # first_init()
+    # mydir = os.path.abspath(r'D:\projectsHome\ur.ctwl\tmpdata1\20190725\detail_result')
+    # # mydir = os.path.abspath(r'D:\projectsHome\ur.ctwl\tmpdata1\20190725')
+    # import warnings
+    # warnings.filterwarnings('ignore')
+    # for start_index, file in enumerate([file for file in os.listdir(mydir) if file.startswith("robot_result")]):
+    #     merge_data = pd.read_csv(os.path.join(mydir, file))
+    #     duoyu = ["leftcards_nums_pair", "rival_leftcards_nums", "rival_leftcards_nums_pair", "rival_cards_value", "rival_position",
+    #      "rival_leadcards_type", "rival_leadcards_cards", "rival_leadcards_num_show", "need_bomb", "label_bomb"]
+    #     merge_data.drop(columns=duoyu, inplace=True)
+    #
+    #     marker = rival_leadcards_treatment2(merge_data)
+    #     current_time = time.strftime('%Y%m%d%H%M%S', time.localtime())
+    #     # TODO
+    #     # marker.to_excel(f"F:/aaa/robot_{current_time}.xlsx", index=False)
+    #     # print(marker.columns)
+    #     chunk_df, data_length = statistic_procedure_v2(marker)
+    #     chunk_df.to_excel(f"F:/aaa/aa_{current_time}.xlsx",index=False)
+    #     if chunk_df.shape[0]:
+    #         # 生成latest版本统计结果
+    #         circle_statistic_procedure(chunk_df, os.path.join(os.path.abspath('F:/aaa/'), 'latest'),
+    #                                    data_length=data_length, all_data_length=start_index + 1)
