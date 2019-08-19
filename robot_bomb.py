@@ -21,6 +21,7 @@ import subprocess
 from itertools import compress
 from tqdm import tqdm
 
+
 def first_init():
     """初始化基础配置"""
     global rawdatadir
@@ -831,14 +832,14 @@ def rival_leadcards_treatment(df):
         cards_order_seat_order.drop(columns=["playtime_unix"], inplace=True)
         cards_order_df = pd.merge(cards_order_df, cards_order_seat_order, on=['startguid'], how='left')
 
-        # TODO
+        # 输出自构建的出牌回合df
         # cards_order_df.to_excel(f"F:/aaa/cards_order_df.xlsx", index=False)
 
         # print(cards_order_df.head())
         gamedf.drop(columns=["seat_order"], inplace=True)  # 删除原始的seat_order
         gamedf = pd.merge(gamedf, cards_order_df, on=["startguid", 'cards_order', 'uid'], how='right')
 
-        # TODO
+        # 输出合并自构建出牌回合和座位号df之后的 gamedf
         # gamedf.to_excel(f"F:/aaa/gamedf.xlsx", index=False)
 
         gamedf = gamedf.sort_values(by=['uid', 'cards_order'], ascending=[True, True])
@@ -854,7 +855,7 @@ def rival_leadcards_treatment(df):
         for col in gamedf.columns:
             gamedf.loc[:, col] = gamedf.loc[:, col].fillna(0)
 
-        # TODO
+        # 输出前项填充的结果gamedf
         # gamedf.to_excel(f"F:/aaa/gamedf_ffill.xlsx", index=False)
 
         gamedf = gamedf.sort_values(by=['cards_order', 'seat_order'], ascending=[True, True])  # 根据出牌顺序排序
@@ -880,7 +881,7 @@ def rival_leadcards_treatment(df):
         gamedf.at[2, "leftcards_nums_pair"] = gamedf.at[0, 'leftcards_nums']
         gamedf.at[3, "leftcards_nums_pair"] = gamedf.at[1, 'leftcards_nums']
 
-        # TODO
+        # 输出增加统计列后的gamedf
         # gamedf.to_excel(f"F:/aaa/gamedf_nums_pair.xlsx", index=False)
 
         idx_length = gamedf.shape[0]
@@ -959,7 +960,7 @@ def rival_leadcards_treatment(df):
         gamedf = gamedf.loc[:, gamedf_cols]
         # gamedf.drop(columns=['seat_order', 'leftcards_nums', 'startguid', 'uid', ], inplace=True)
         statistic_df = statistic_df.append(gamedf, sort=False, ignore_index=True)  # concat会匹配index,ignore_index
-        # TODO
+        # 输出所有统计列标记完成后的gamedf == statistic_df
         # statistic_df.to_excel(f"F:/aaa/gamedf_statistic.xlsx", index=False)
 
     # df = pd.concat([df, statistic_df], axis=1) # 按顺序匹配总是可能存在index的问题
@@ -1298,26 +1299,3 @@ if __name__ == '__main__':
     reduce_raw_data()  # 缩减原始数据体积
     # main_process(True, data_sep=1)  # 测试数据
     main_process(process_test=False, win_ratio=0.5, data_sep=1, )
-
-    # first_init()
-    # mydir = os.path.abspath(r'D:\projectsHome\ur.ctwl\tmpdata1\20190725\detail_result')
-    # # mydir = os.path.abspath(r'D:\projectsHome\ur.ctwl\tmpdata1\20190725')
-    # import warnings
-    # warnings.filterwarnings('ignore')
-    # for start_index, file in enumerate([file for file in os.listdir(mydir) if file.startswith("robot_result")]):
-    #     merge_data = pd.read_csv(os.path.join(mydir, file))
-    #     duoyu = ["leftcards_nums_pair", "rival_leftcards_nums", "rival_leftcards_nums_pair", "rival_cards_value", "rival_position",
-    #      "rival_leadcards_type", "rival_leadcards_cards", "rival_leadcards_num_show", "need_bomb", "label_bomb"]
-    #     merge_data.drop(columns=duoyu, inplace=True)
-    #
-    #     marker = rival_leadcards_treatment2(merge_data)
-    #     current_time = time.strftime('%Y%m%d%H%M%S', time.localtime())
-    #     # TODO
-    #     # marker.to_excel(f"F:/aaa/robot_{current_time}.xlsx", index=False)
-    #     # print(marker.columns)
-    #     chunk_df, data_length = statistic_procedure_v2(marker)
-    #     chunk_df.to_excel(f"F:/aaa/aa_{current_time}.xlsx",index=False)
-    #     if chunk_df.shape[0]:
-    #         # 生成latest版本统计结果
-    #         circle_statistic_procedure(chunk_df, os.path.join(os.path.abspath('F:/aaa/'), 'latest'),
-    #                                    data_length=data_length, all_data_length=start_index + 1)
