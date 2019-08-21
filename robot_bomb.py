@@ -952,7 +952,7 @@ def rival_leadcards_treatment(df):
                 # 出三带二
                 gamedf = compare_leftcards_exclude(gamedf, source_idx=idx, plus_idx=1)
 
-        gamedf_cols = ['startguid', 'uid', 'cards_order', 'playtime_unix', "leftcards_nums_pair",
+        gamedf_cols = ['startguid', 'uid', 'cards_order', "leftcards_nums_pair",
                        'rival_leftcards_nums', 'rival_leftcards_nums_pair',
                        "rival_cards_value", "rival_position", 'rival_leadcards_type', 'rival_leadcards_cards',
                        'rival_leadcards_num_show', 'need_bomb', 'label_bomb', ]
