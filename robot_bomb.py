@@ -6,6 +6,7 @@
 # @Time    : 2019/8/16 11:15 V4 修复对局日志选手跑完牌后无记录，导致选手错位，以致统计标记错误的问题
 # @Time    : 2019/8/27 15:43 V5 修复统计标记为出牌后的手牌信息为 出牌前的手牌信息
 # @Time    : 2019/9/12 16:47:21 V5.1 可将剩余牌信息的构建 --》 转移到 basic_treatment，简化中间统计文件存储，合并加快计算
+# @Time    : 2019/9/18 18:27:03 V5.2 增加机机-人人的标识
 # @Author  : wanghd
 # @note    : 用户牌局出炸情况处理（拆牌+ 统计）
 
@@ -1072,6 +1073,25 @@ def statistic_procedure_v2(df, date_dir_str):
 
     df.loc[:, "lead_cards"] = df.apply(lambda row: calculate_lead_cards(row), axis=1)
 
+    # 处理用户与机器人
+    df_robot = pd.read_excel("robots_ids.xlsx")
+    robots_uids = df_robot.loc[:, "用户ID"].unique()
+    df.loc[:, "whether_robot"] = df.loc[:, "uid"].apply(lambda x: 1 if x in robots_uids else 0)
+    sequence_df = df.loc[df.loc[:, "cards_order"] == 1, ["startguid", "seat_order", "whether_robot"]].reset_index(
+        drop=True)
+    sequence_df.loc[:, "seat_order"] = sequence_df.loc[:, "seat_order"].apply(lambda x: f"seat_{str(x)}")
+    print(sequence_df)
+    sequence_df = pd.pivot(sequence_df, index='startguid', columns='seat_order', values='whether_robot').reset_index(
+        drop=False)
+    sequence_df.loc[:, "robot_seq"] = sequence_df.apply(
+        lambda row: 2*(str(row["seat_1"]) + str(row["seat_2"]) + str(row["seat_3"]) + str(row["seat_4"])), axis=1)
+    sequence_df.drop(columns=[f"seat_{num}" for num in range(1, 5)], inplace=True)
+    df = pd.merge(df, sequence_df, on=['startguid'], copy=False)
+    df.loc[:, "robot_seq"] = df.apply(lambda row: row["robot_seq"][row["seat_order"]:row["seat_order"] + 4], axis=1)
+    df.rename(columns={"robot_seq": "players_type"}, inplace=True)
+    # 是否 机机-人人 对局
+    df.loc[:, "players_type"] = df.loc[:, "players_type"].apply(lambda x: 1 if x in ["1010"] else 0)
+
     # 处理房间号：从startguid中拆分出来
     def room_sep(x):
         if x in ["17743", '17744', '8136', '10321', '10163', '18934', '9533']:
@@ -1088,15 +1108,10 @@ def statistic_procedure_v2(df, date_dir_str):
     df.loc[:, "rival_position"] = df.loc[:, "rival_position"].astype(str)
     df.loc[:, "rival_position"] = df.loc[:, "rival_position"].map(rival_position_dict)
 
-    # 处理用户与机器人
-    df_robot = pd.read_excel("robots_ids.xlsx")
-    robots_uids = df_robot.loc[:, "用户ID"].unique()
-    df.loc[:, "whether_robot"] = df.loc[:, "uid"].apply(lambda x: 1 if x in robots_uids else 0)
-
     # 筛选数据进行统计
     used_cols = ["startguid", 'rival_leftcards_nums', 'rival_leftcards_nums_pair', 'leftcards_nums_pair',
                  'leftbomb_nums', 'Nonebomb_lefthands', 'label_uid', "whether_robot", 'lead_cards', 'rival_position',
-                 'need_bomb', 'label_bomb', "startguid_copy"]
+                 'players_type', 'need_bomb', 'label_bomb', "startguid_copy"]
     # 可压/不可压， 出牌方出牌类型， 本方剩余炸弹数
     # write_data(df, os.path.abspath(r"F:\raw_data_dir\aaaa\detail_result"), "gamedf_before_statistic", index=False)
     df.loc[:, 'label_uid'] = df.loc[:, 'label_uid'].fillna(0)
@@ -1128,6 +1143,7 @@ def statistic_procedure_v2(df, date_dir_str):
             'rival_position': "出牌对手位置",
             'label_uid': "历史胜率0.5",
             'whether_robot': "是否机器人",
+            'players_type': "人机对局情况",
             "need_bomb": "occurrence_times",
             "label_bomb": "lead_bomb_times",
             'startguid': "房间号",
