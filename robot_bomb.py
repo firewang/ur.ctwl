@@ -6,7 +6,7 @@
 # @Time    : 2019/8/16 11:15 V4 修复对局日志选手跑完牌后无记录，导致选手错位，以致统计标记错误的问题
 # @Time    : 2019/8/27 15:43 V5 修复统计标记为出牌后的手牌信息为 出牌前的手牌信息
 # @Time    : 2019/9/12 16:47:21 V5.1 可将剩余牌信息的构建 --》 转移到 basic_treatment，简化中间统计文件存储，合并加快计算
-# @Time    : 2019/9/18 18:27:03 V5.2 增加机机-人人的标识
+# @Time    : 2019/9/18 18:27:03 V5.2 增加机机-人人的标识， 分离机器人对局原始数据缩减
 # @Author  : wanghd
 # @note    : 用户牌局出炸情况处理（拆牌+ 统计）
 
@@ -125,6 +125,40 @@ def get_config_dict(filepath, filename, section_name):
 
 
 def reduce_raw_data(win_ratio=0.5, date_str_prefix='2019'):
+    """筛选含机器人的对局，缩减原始数据体积，仅保存需要的列， 标记用户胜率（阈值0.5）"""
+    first_init()
+    # 缩减customization 定制表体积
+    cus_usecols = ['startguid', 'uid', 'cards', 'rank', 'num', 'room']  # 起手牌,级牌，起手牌牌面信息
+    cus_files = [file for file in os.listdir(rawdatadir) if file.startswith(f'customization_{date_str_prefix}')]
+    # 缩减showcards 出牌信息表体积
+    show_usecols = ['startguid', 'uid', 'starttime_unix', 'playtime_unix', 'type', 'cards_order', 'cards', 'num']
+    show_files = [file for file in os.listdir(rawdatadir) if file.startswith(f'showcards_{date_str_prefix}')]
+    # 缩减start开局表，有历史对局战绩信息
+    start_usecols = ['uid', 'win', 'loss']  # 历史胜局数，历史输局数
+    start_files = [file for file in os.listdir(rawdatadir) if file.startswith(f'start_{date_str_prefix}')]
+
+    # TODO 增加验证3者文件日期是否匹配
+    for start_file, cus_file, show_file in zip(start_files, cus_files, show_files):
+        print(start_file, cus_file, show_file)
+        start = pd.read_csv(os.path.join(rawdatadir, start_file), usecols=start_usecols, encoding='gbk')
+        start.loc[:, "sum"] = start.apply(lambda row: row["win"] + row["loss"], axis=1)
+        # 计算胜率
+        start.loc[:, "win_ratio"] = start.apply(lambda row: row["win"]/row["sum"] if row["sum"] != 0 else 0, axis=1)
+        # start.to_csv(os.path.join(rawdatadir, f"short_win_ratio_{win_ratio}_{start_file}"), index=False)  # 保存用户ID
+        start.loc[:, 'label_uid'] = start.loc[:, 'win_ratio'].apply(lambda x: 1 if x >= win_ratio else 0)
+        start.drop(columns=["win", "loss", 'sum', 'win_ratio'], inplace=True)  # 删除多余列
+        start = start.groupby(["uid"]).agg({"label_uid": max}).reset_index(drop=False)  # 删除重复 uid 标记
+
+        cus = pd.read_csv(os.path.join(rawdatadir, cus_file), usecols=cus_usecols, encoding='gbk')
+        cus = pd.merge(cus, start, on='uid', how='left', copy=False)
+
+        cus.to_csv(os.path.join(rawdatadir, f"short_win_ratio_{win_ratio}_{cus_file}"), index=False, encoding='gbk')
+        del cus
+        show = pd.read_csv(os.path.join(rawdatadir, show_file), usecols=show_usecols, encoding='gbk')
+        show.to_csv(os.path.join(rawdatadir, f"short_win_ratio_{win_ratio}_{show_file}"), index=False, encoding='gbk')
+
+
+def reduce_raw_data_robot(win_ratio=0.5, date_str_prefix='2019'):
     """缩减原始数据体积，仅保存需要的列， 标记用户胜率（阈值0.5）"""
     first_init()
     # 缩减customization 定制表体积
@@ -136,7 +170,7 @@ def reduce_raw_data(win_ratio=0.5, date_str_prefix='2019'):
     # 缩减start开局表，有历史对局战绩信息
     start_usecols = ['uid', 'win', 'loss']  # 历史胜局数，历史输局数
     start_files = [file for file in os.listdir(rawdatadir) if file.startswith(f'start_{date_str_prefix}')]
-    # TODO 临时筛选机器人
+    # 筛选机器人
     df_robot = pd.read_excel("robots_ids.xlsx")  # DO
     robots_uids = df_robot.loc[:, "用户ID"].unique()  # DO
 
@@ -1080,14 +1114,13 @@ def statistic_procedure_v2(df, date_dir_str):
     sequence_df = df.loc[df.loc[:, "cards_order"] == 1, ["startguid", "seat_order", "whether_robot"]].reset_index(
         drop=True)
     sequence_df.loc[:, "seat_order"] = sequence_df.loc[:, "seat_order"].apply(lambda x: f"seat_{str(x)}")
-    print(sequence_df)
     sequence_df = pd.pivot(sequence_df, index='startguid', columns='seat_order', values='whether_robot').reset_index(
         drop=False)
     sequence_df.loc[:, "robot_seq"] = sequence_df.apply(
         lambda row: 2*(str(row["seat_1"]) + str(row["seat_2"]) + str(row["seat_3"]) + str(row["seat_4"])), axis=1)
     sequence_df.drop(columns=[f"seat_{num}" for num in range(1, 5)], inplace=True)
     df = pd.merge(df, sequence_df, on=['startguid'], copy=False)
-    df.loc[:, "robot_seq"] = df.apply(lambda row: row["robot_seq"][row["seat_order"]:row["seat_order"] + 4], axis=1)
+    df.loc[:, "robot_seq"] = df.apply(lambda row: row["robot_seq"][row["seat_order"]-1:row["seat_order"] + 3], axis=1)
     df.rename(columns={"robot_seq": "players_type"}, inplace=True)
     # 是否 机机-人人 对局
     df.loc[:, "players_type"] = df.loc[:, "players_type"].apply(lambda x: 1 if x in ["1010"] else 0)
@@ -1326,5 +1359,6 @@ def main_process(process_test=True, genarate=False, win_ratio=0.5, data_sep=1000
 
 if __name__ == '__main__':
     reduce_raw_data(win_ratio=0.5, date_str_prefix="201909")  # 缩减原始数据体积
+    # reduce_raw_data_robot(win_ratio=0.5, date_str_prefix="201909")  # 缩减原始数据体积(仅含机器人的对局)
     # main_process(True, data_sep=1)  # 测试数据
-    main_process(process_test=False, win_ratio=0.5, data_sep=2, date_str_prefix="201912")
+    main_process(process_test=False, win_ratio=0.5, data_sep=10, date_str_prefix="20190911")
